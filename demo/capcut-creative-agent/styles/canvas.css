@@ -11,7 +11,8 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  cursor: default;
+  /* 空白处拖拽即平移，用 grab 光标把这件事说明白 */
+  cursor: grab;
 }
 .canvas-viewport.is-panning { cursor: grabbing; }
 .canvas-viewport.space-down { cursor: grab; }
@@ -81,6 +82,7 @@
 /* ================= 节点卡片 ================= */
 .node {
   position: absolute;
+  cursor: default;
   border-radius: 14px;
   background: linear-gradient(180deg, #191d25, #15181f);
   border: 1px solid #2a303b;
@@ -356,19 +358,27 @@
 /* 右侧派生手柄 */
 .node-handle {
   position: absolute;
-  right: -13px; top: 50%;
+  right: -14px; top: 50%;
   transform: translateY(-50%);
-  width: 24px; height: 24px; border-radius: 50%;
+  width: 26px; height: 26px; border-radius: 50%;
   display: grid; place-items: center;
   background: #1e2431;
   border: 1px solid #3b4657;
   color: #b9c4d8;
-  font-size: 13px; line-height: 1;
-  opacity: 0;
+  font-size: 14px; line-height: 1;
+  /* 常态半透明保证可发现性，hover / 选中时完全实心 */
+  opacity: .38;
   transition: opacity .14s ease, transform .14s ease, background .14s ease;
   z-index: 3;
 }
-.node:hover .node-handle, .node.is-selected .node-handle { opacity: 1; }
+.node:hover .node-handle { opacity: 1; }
+.node.is-selected .node-handle {
+  opacity: 1;
+  background: linear-gradient(135deg, #7ea6ff, #b79aff);
+  color: #0b101a;
+  border-color: transparent;
+  box-shadow: 0 0 0 4px rgba(126, 166, 255, .16);
+}
 .node-handle:hover {
   background: linear-gradient(135deg, #7ea6ff, #b79aff);
   color: #0b101a; border-color: transparent;

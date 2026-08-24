@@ -141,7 +141,7 @@ window.Generate = (function () {
       if (!node) return false
       Store.patchNode(nodeId, { progress: t }, 'progress')
       if (t >= 1) return true
-      await U.sleep(120)
+      await U.tick(120)
     }
   }
 
@@ -200,7 +200,7 @@ window.Generate = (function () {
       if (!node) return
       node.text = fullText.slice(0, i)
       Store.emit('typing')
-      await U.sleep(38)
+      await U.tick(38)
     }
     Store.patchNode(nodeId, { text: fullText, status: 'ready', progress: 1 }, 'generate:done')
     Store.state.edges.filter((e) => e.to === nodeId && e.status === 'pending')

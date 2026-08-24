@@ -8,6 +8,23 @@ window.U = (function () {
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+  /**
+   * 用于进度轮询的等待：页面被隐藏时浏览器会把 setTimeout 节流到秒级甚至分钟级，
+   * 这里额外监听 visibilitychange，页面一回到前台立刻补一次 tick，避免进度看起来卡死。
+   */
+  function tick(ms) {
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer)
+        document.removeEventListener('visibilitychange', onVisible)
+        resolve()
+      }
+      const onVisible = () => { if (!document.hidden) finish() }
+      const timer = setTimeout(finish, ms)
+      document.addEventListener('visibilitychange', onVisible)
+    })
+  }
+
   const rand = (min, max) => min + Math.random() * (max - min)
 
   const pick = (list) => list[Math.floor(Math.random() * list.length)]
@@ -93,5 +110,5 @@ window.U = (function () {
     toastTimer.set(t, id)
   }
 
-  return { uid, clamp, sleep, rand, pick, hash, seeded, tween, easeOutCubic, el, escapeHtml, truncate, toast }
+  return { uid, clamp, sleep, tick, rand, pick, hash, seeded, tween, easeOutCubic, el, escapeHtml, truncate, toast }
 })()

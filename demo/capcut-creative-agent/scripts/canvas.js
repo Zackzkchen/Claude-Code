@@ -174,8 +174,9 @@ window.Canvas = (function () {
       if (nodeEl) return // 节点自身的 pointerdown 处理
 
       if (e.button !== 0) return
-      // 空白处：框选（Shift 追加）；未按 Shift 时先清空选区
-      startMarquee(e)
+      // 空白处：默认拖拽平移（面向大众用户更好上手），Shift+拖拽才是框选
+      if (e.shiftKey) startMarquee(e)
+      else startPan(e, { clearSelectionOnClick: true })
     })
 
     R.viewport.addEventListener('dblclick', (e) => {
@@ -185,14 +186,18 @@ window.Canvas = (function () {
     })
   }
 
-  function startPan(e) {
+  function startPan(e, { clearSelectionOnClick = false } = {}) {
     const v = vp()
     const start = { x: e.clientX, y: e.clientY, vx: v.x, vy: v.y }
+    let moved = false
     R.viewport.classList.add('is-panning')
     interaction = 'pan'
     const move = (ev) => {
-      v.x = start.vx + (ev.clientX - start.x)
-      v.y = start.vy + (ev.clientY - start.y)
+      const dx = ev.clientX - start.x
+      const dy = ev.clientY - start.y
+      if (Math.abs(dx) + Math.abs(dy) > 3) moved = true
+      v.x = start.vx + dx
+      v.y = start.vy + dy
       applyViewport()
     }
     const up = () => {
@@ -200,6 +205,8 @@ window.Canvas = (function () {
       window.removeEventListener('pointerup', up)
       R.viewport.classList.remove('is-panning')
       interaction = null
+      // 空白处单击（没拖动）= 取消选择
+      if (!moved && clearSelectionOnClick) Store.setSelection([])
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
