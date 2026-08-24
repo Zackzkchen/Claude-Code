@@ -190,6 +190,18 @@
   padding: 0 2px;
 }
 .context-bar .ctx-x:hover { color: #fff; }
+.context-bar { flex-wrap: wrap; }
+.ctx-list { width: 100%; display: flex; flex-wrap: wrap; gap: 4px; }
+.ctx-chip {
+  max-width: 100%;
+  padding: 2px 8px; border-radius: 20px;
+  border: 1px solid rgba(91, 140, 255, .34);
+  background: rgba(91, 140, 255, .1);
+  color: #bcd0f7; font-size: 10.5px; font-family: var(--font);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ctx-chip:hover { color: #fff; border-color: var(--accent); }
+.ctx-chip.more { color: #8fa2c9; cursor: default; }
 
 .quick-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
 .quick-chips .sugg { font-size: 11px; padding: 4px 9px; }

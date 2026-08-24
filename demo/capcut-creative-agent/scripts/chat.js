@@ -208,7 +208,7 @@ window.Chat = (function () {
       return
     }
     R.contextBar.hidden = false
-    R.contextBar.replaceChildren(
+    const rows = [
       U.el('span', { class: 'ctx-icon', text: sel.length > 1 ? String(sel.length) : (sel[0].type === 'text' ? 'T' : sel[0].type === 'video' ? '▶' : '▣') }),
       U.el('span', {
         class: 'ctx-name',
@@ -217,7 +217,17 @@ window.Chat = (function () {
           : `已选中 <b>${U.escapeHtml(U.truncate(sel[0].title, 16))}</b>，指令将基于它执行`
       }),
       U.el('button', { class: 'ctx-x', text: '×', title: '取消选择', onclick: () => Store.setSelection([]) })
-    )
+    ]
+    // 多选时把选中的节点列出来，避免"指令到底作用在哪几个"说不清
+    if (sel.length > 1) {
+      rows.push(U.el('div', { class: 'ctx-list' }, sel.slice(0, 6).map((n) => U.el('button', {
+        class: 'ctx-chip',
+        text: U.truncate(n.title, 10),
+        title: '在画布中定位',
+        onclick: async () => { await Canvas.focusNode(n.id, { select: false }); Canvas.flashNode(n.id) }
+      })).concat(sel.length > 6 ? [U.el('span', { class: 'ctx-chip more', text: `+${sel.length - 6}` })] : [])))
+    }
+    R.contextBar.replaceChildren(...rows)
     renderChips(sel.length > 1 ? CHIPS.multi : CHIPS[sel[0].type])
   }
 

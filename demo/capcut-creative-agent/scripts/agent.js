@@ -226,7 +226,12 @@ window.Agent = (function () {
       nodes = Store.state.nodes.filter((n) => n.type === 'video' && n.status === 'ready' && n.kind !== 'final')
     }
     if (nodes.length < 2) {
-      await Chat.pushAgent('至少要有 2 个素材才能合成成片。先选中画布上的多个节点（Shift 点选），或者让我先生成几个镜头。')
+      await Chat.pushAgent(
+        '合成成片至少需要 2 个素材，现在画布上还不够。两种办法：<br>' +
+        '① 在画布上按住 <b>Shift</b> 点选多个卡片（或 <b>Shift</b>+空白拖拽框选），再对我说"合成成片"；<br>' +
+        '② 让我先生成几个镜头，比如"把这些图生成视频镜头"。'
+      )
+      Chat.pushSuggestions(['基于这段脚本生成人物图', '把这些图生成视频镜头', '帮我做一条国风护手霜的短视频'])
       return
     }
     const card = Chat.taskCard(`合成成片（${nodes.length} 个素材）`, ['排列镜头顺序 / 转场', '渲染成片并标注血缘'])

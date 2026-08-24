@@ -85,7 +85,93 @@ window.Media = (function () {
     ctx.stroke()
   }
 
+  /** 场景变体：城市楼群剪影 */
+  function drawCityScene(ctx, w, h, colors, rnd) {
+    const [bg1, bg2, accent] = colors
+    const sky = ctx.createLinearGradient(0, 0, 0, h)
+    sky.addColorStop(0, bg1)
+    sky.addColorStop(0.7, bg2)
+    sky.addColorStop(1, bg1)
+    ctx.fillStyle = sky
+    ctx.fillRect(0, 0, w, h)
+
+    const glow = ctx.createRadialGradient(w * 0.5, h * 0.75, 10, w * 0.5, h * 0.75, w * 0.7)
+    glow.addColorStop(0, `${accent}44`)
+    glow.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = glow
+    ctx.fillRect(0, 0, w, h)
+
+    let x = -w * 0.05
+    while (x < w) {
+      const bw = w * (0.08 + rnd() * 0.1)
+      const bh = h * (0.22 + rnd() * 0.44)
+      ctx.fillStyle = `rgba(8,10,16,${0.55 + rnd() * 0.35})`
+      ctx.fillRect(x, h - bh, bw, bh)
+      // 亮着的窗
+      for (let wy = h - bh + h * 0.03; wy < h - h * 0.05; wy += h * 0.055) {
+        for (let wx = x + bw * 0.14; wx < x + bw * 0.86; wx += bw * 0.26) {
+          if (rnd() > 0.55) {
+            ctx.fillStyle = `${accent}${rnd() > 0.5 ? 'cc' : '77'}`
+            ctx.fillRect(wx, wy, bw * 0.13, h * 0.02)
+          }
+        }
+      }
+      x += bw + w * 0.012
+    }
+  }
+
+  /** 场景变体：室内窗光 */
+  function drawRoomScene(ctx, w, h, colors, rnd) {
+    const [bg1, bg2, accent] = colors
+    const g = ctx.createLinearGradient(w, 0, 0, h)
+    g.addColorStop(0, bg2)
+    g.addColorStop(1, bg1)
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, w, h)
+
+    // 窗
+    const wx = w * (0.52 + rnd() * 0.16)
+    const wy = h * 0.14
+    const ww = w * 0.3
+    const wh = h * 0.46
+    ctx.fillStyle = `${accent}dd`
+    ctx.fillRect(wx, wy, ww, wh)
+    ctx.strokeStyle = 'rgba(10,12,18,.85)'
+    ctx.lineWidth = Math.max(2, w * 0.008)
+    ctx.strokeRect(wx, wy, ww, wh)
+    ctx.beginPath()
+    ctx.moveTo(wx + ww / 2, wy)
+    ctx.lineTo(wx + ww / 2, wy + wh)
+    ctx.moveTo(wx, wy + wh / 2)
+    ctx.lineTo(wx + ww, wy + wh / 2)
+    ctx.stroke()
+
+    // 透进来的光
+    ctx.save()
+    ctx.globalAlpha = 0.3
+    ctx.fillStyle = accent
+    ctx.beginPath()
+    ctx.moveTo(wx, wy + wh)
+    ctx.lineTo(wx + ww, wy + wh)
+    ctx.lineTo(wx + ww * 0.4, h)
+    ctx.lineTo(-w * 0.1, h)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+
+    // 桌面与静物剪影
+    ctx.fillStyle = 'rgba(8,10,15,.7)'
+    ctx.fillRect(0, h * 0.78, w, h * 0.22)
+    ctx.beginPath()
+    ctx.ellipse(w * 0.24, h * 0.78, w * 0.07, h * 0.11, 0, Math.PI, 0)
+    ctx.fill()
+  }
+
   function drawScene(ctx, w, h, colors, rnd) {
+    const variant = Math.floor(rnd() * 3)
+    if (variant === 1) return drawCityScene(ctx, w, h, colors, rnd)
+    if (variant === 2) return drawRoomScene(ctx, w, h, colors, rnd)
+
     const [bg1, bg2, accent] = colors
     const sky = ctx.createLinearGradient(0, 0, 0, h)
     sky.addColorStop(0, bg1)
