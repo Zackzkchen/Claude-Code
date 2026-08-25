@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>剪映 PC · 全民创作 Agent（无限画布 MVP Demo）</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ededed'/%3E%3Cpath d='M10 22V10h4l4 7 4-7h-1v12' stroke='%23111' stroke-width='2' fill='none'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./styles/base.css" />
+<link rel="stylesheet" href="./styles/canvas.css" />
+<link rel="stylesheet" href="./styles/chat.css" />
+<link rel="stylesheet" href="./styles/preview.css" />
+</head>
+<body>
+  <!-- 模拟剪映 PC 客户端外壳 -->
+  <div class="app-shell">
+    <header class="titlebar">
+      <div class="titlebar-left">
+        <div class="traffic"><i></i><i></i><i></i></div>
+        <div class="app-brand">
+          <span class="app-logo">剪</span>
+          <span class="app-name">剪映专业版</span>
+        </div>
+        <nav class="tab-bar">
+          <button class="tab" data-noop>开始创作</button>
+          <button class="tab is-active">全民创作 Agent</button>
+          <button class="tab" data-noop>我的空间</button>
+        </nav>
+      </div>
+      <div class="titlebar-right">
+        <button class="ghost-btn" id="btn-guide">交互说明</button>
+        <button class="ghost-btn" id="btn-reset">重置演示</button>
+        <button class="primary-btn" id="btn-autoplay">一键演示</button>
+        <div class="avatar">A</div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <!-- 左：无限画布 -->
+      <section class="canvas-pane" id="canvas-pane">
+        <div class="canvas-viewport" id="viewport">
+          <div class="canvas-grid" id="grid"></div>
+          <div class="canvas-world" id="world">
+            <svg class="edge-layer" id="edge-layer" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
+                </marker>
+              </defs>
+              <g id="edge-paths"></g>
+              <g id="edge-labels"></g>
+            </svg>
+            <div class="node-layer" id="node-layer"></div>
+          </div>
+          <div class="marquee" id="marquee" hidden></div>
+        </div>
+
+        <!-- 画布空状态 -->
+        <div class="canvas-empty" id="canvas-empty" hidden>
+          <div class="canvas-empty-inner">
+            <div class="canvas-empty-icon">＋</div>
+            <h3>从一个想法开始</h3>
+            <p>用下方工具栏新增文本 / 图片 / 视频素材，或直接告诉右侧 Agent 你想做什么。</p>
+          </div>
+        </div>
+
+        <!-- 画布左上：面包屑与 Agent 操作提示 -->
+        <div class="canvas-topbar">
+          <div class="canvas-title">
+            <span class="dot"></span>
+            <strong>创作画布</strong>
+            <span class="canvas-meta" id="canvas-meta">0 个节点 · 0 条关系</span>
+          </div>
+          <div class="agent-cursor-hint" id="agent-busy" hidden>
+            <span class="pulse"></span> Agent 正在操作画布…
+          </div>
+        </div>
+
+        <!-- 画布右上：视图操作 -->
+        <div class="canvas-tools-tr">
+          <button class="tool-btn" id="btn-tidy" title="整理布局（按血缘重新排布）">整理布局</button>
+          <button class="tool-btn" id="btn-fit" title="适配画面 Shift+1">适配画面</button>
+          <div class="zoom-group">
+            <button class="tool-btn icon" id="btn-zoom-out" title="缩小">−</button>
+            <button class="tool-btn zoom-label" id="btn-zoom-reset" title="恢复 100% Shift+0">100%</button>
+            <button class="tool-btn icon" id="btn-zoom-in" title="放大">＋</button>
+          </div>
+        </div>
+
+        <!-- 画布底部：新增素材工具栏 -->
+        <div class="canvas-dock">
+          <button class="dock-btn" id="dock-text">
+            <span class="dock-icon">T</span>
+            <span class="dock-text">文本<em>点 ＋ 后键盘输入</em></span>
+          </button>
+          <button class="dock-btn" id="dock-image">
+            <span class="dock-icon">▣</span>
+            <span class="dock-text">图片<em>本地上传 / AI 生成</em></span>
+          </button>
+          <button class="dock-btn" id="dock-video">
+            <span class="dock-icon">▶</span>
+            <span class="dock-text">视频<em>本地上传 / AI 生成</em></span>
+          </button>
+          <div class="dock-sep"></div>
+          <div class="dock-tip">空白拖拽平移 · 滚轮缩放 · Shift 点选/框选 · Delete 删除</div>
+        </div>
+
+        <!-- 节点悬浮操作条（单例，跟随选中节点） -->
+        <div class="node-toolbar" id="node-toolbar" hidden>
+          <button data-act="detail">查看详情</button>
+          <button data-act="generate" class="strong"><span class="spark">✦</span>生成</button>
+          <button data-act="edit">编辑</button>
+          <button data-act="duplicate">复制</button>
+          <button data-act="delete" class="danger">删除</button>
+        </div>
+
+        <!-- 生成菜单（单例） -->
+        <div class="gen-menu" id="gen-menu" hidden>
+          <div class="gen-menu-head" id="gen-menu-head">以「节点」为素材继续生成</div>
+          <div class="gen-menu-list" id="gen-menu-list"></div>
+        </div>
+
+        <!-- 局部放大预览页：盖住画布区，右侧对话仍可用 -->
+        <div class="preview-layer" id="preview-layer" hidden>
+          <header class="preview-head">
+            <button class="ghost-btn small" id="preview-back">← 返回画布</button>
+            <div class="preview-title">
+              <span class="node-kind" id="preview-kind">T</span>
+              <strong id="preview-name">节点</strong>
+              <span class="node-badge" id="preview-badge"></span>
+              <span class="preview-scope">局部放大预览 · 含直接上下游</span>
+            </div>
+            <div class="preview-head-right">
+              <button class="tool-btn" id="preview-prev" title="上一个同级节点 ←">‹</button>
+              <button class="tool-btn" id="preview-next" title="下一个同级节点 →">›</button>
+              <div class="zoom-group">
+                <button class="tool-btn icon" id="preview-zoom-out" title="缩小">−</button>
+                <button class="tool-btn zoom-label" id="preview-zoom-fit" title="适配">100%</button>
+                <button class="tool-btn icon" id="preview-zoom-in" title="放大">＋</button>
+              </div>
+              <button class="tool-btn" id="preview-locate">在画布中定位</button>
+            </div>
+          </header>
+          <div class="preview-body">
+            <div class="preview-stage" id="preview-stage">
+              <div class="preview-world" id="preview-world">
+                <svg class="edge-layer" id="preview-edge-layer" xmlns="http://www.w3.org/2000/svg">
+                  <g id="preview-edge-paths"></g>
+                  <g id="preview-edge-labels"></g>
+                </svg>
+                <div class="node-layer" id="preview-nodes"></div>
+              </div>
+              <div class="preview-hint">滚轮缩放 · 拖拽平移 · 点上下游卡片可继续深入 · Esc 返回</div>
+            </div>
+            <aside class="preview-side" id="preview-side"></aside>
+          </div>
+        </div>
+      </section>
+
+      <div class="pane-resizer" id="pane-resizer" title="拖拽调整画布 / 对话宽度"></div>
+
+      <!-- 右：Agent 对话面板 -->
+      <aside class="chat-pane" id="chat-pane">
+        <header class="chat-head">
+          <div class="chat-head-main">
+            <div class="agent-avatar">✦</div>
+            <div>
+              <div class="chat-title">全民创作 Agent</div>
+              <div class="chat-sub" id="chat-status">在线 · 可直接操作画布</div>
+            </div>
+          </div>
+          <button class="ghost-btn small" id="btn-clear-chat">清空对话</button>
+        </header>
+
+        <div class="chat-scroll" id="chat-scroll"></div>
+
+        <footer class="chat-composer">
+          <div class="context-bar" id="context-bar" hidden></div>
+          <div class="quick-chips" id="quick-chips"></div>
+          <div class="composer-box">
+            <textarea id="chat-input" rows="1" placeholder="描述你的创作需求，例如：帮我做一条国风护手霜的短视频"></textarea>
+            <button class="send-btn" id="btn-send" title="发送 Enter">发送</button>
+          </div>
+        </footer>
+      </aside>
+    </main>
+  </div>
+
+  <!-- 交互说明弹层 -->
+  <div class="modal-mask" id="guide-modal" hidden>
+    <div class="modal">
+      <header>
+        <h3>MVP 无限画布 · 最小交互集</h3>
+        <button class="ghost-btn small" id="btn-guide-close">关闭</button>
+      </header>
+      <div class="modal-body" id="guide-body"></div>
+    </div>
+  </div>
+
+  <input type="file" id="file-image" accept="image/*" hidden />
+  <input type="file" id="file-video" accept="video/*" hidden />
+
+  <div class="toast-wrap" id="toast-wrap"></div>
+
+  <script src="./scripts/util.js"></script>
+  <script src="./scripts/media.js"></script>
+  <script src="./scripts/store.js"></script>
+  <script src="./scripts/canvas.js"></script>
+  <script src="./scripts/preview.js"></script>
+  <script src="./scripts/generate.js"></script>
+  <script src="./scripts/chat.js"></script>
+  <script src="./scripts/agent.js"></script>
+  <script src="./scripts/app.js"></script>
+</body>
+</html>
