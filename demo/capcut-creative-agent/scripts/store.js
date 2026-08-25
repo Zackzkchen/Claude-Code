@@ -1,9 +1,10 @@
 /* 画布数据模型：节点 / 关系（血缘）/ 选区 / 视口 / 撤销栈 */
 window.Store = (function () {
+  // 卡片不再有标题栏/脚注，尺寸按内容本身给：图片近方、视频 16:9
   const SIZE = {
-    text: { w: 300, h: 196 },
-    image: { w: 236, h: 250 },
-    video: { w: 300, h: 252 }
+    text: { w: 300, h: 190 },
+    image: { w: 240, h: 240 },
+    video: { w: 304, h: 171 }
   }
 
   const TYPE_LABEL = { text: '文本', image: '图片', video: '视频' }
@@ -102,6 +103,7 @@ window.Store = (function () {
         source: 'manual',
         text: '',
         prompt: '',
+        refs: [],
         src: '',
         poster: '',
         duration: 0,

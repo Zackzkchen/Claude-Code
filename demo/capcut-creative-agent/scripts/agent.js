@@ -2,7 +2,10 @@
 window.Agent = (function () {
   let busy = false
 
-  const A = (type, id) => window.Generate.ACTIONS[type].find((a) => a.id === id)
+  /** Agent 用到的动作：先找语义动作（人物/场景/商品），再找画布动作；一律立刻生成 */
+  const A = (type, id) => Generate.instant(
+    Generate.SEMANTIC[id] || Generate.ACTIONS[type].find((a) => a.id === id)
+  )
 
   function extractTopic(text) {
     let t = String(text || '')
@@ -177,7 +180,7 @@ window.Agent = (function () {
     card.addNodes(ids)
     Store.setSelection(ids)
     await Chat.pushAgent('视频已生成，连线标签「文生视频」表示它直接继承自脚本节点。')
-    Chat.pushSuggestions(['提取封面图', '再延长 3s', '把选中的素材合成一条成片'])
+    Chat.pushSuggestions(['把这段脚本也生成图片', '整理一下画布布局', '把选中的素材合成一条成片'])
   }
 
   async function genVideoFromImage() {
@@ -198,7 +201,7 @@ window.Agent = (function () {
     card.addNodes(ids)
     Store.setSelection(ids)
     await Chat.pushAgent('镜头出来了。画布上「图片 → 视频」的连线就是这次的继承关系。')
-    Chat.pushSuggestions(['把选中的素材合成一条成片', '提取封面图', '整理一下画布布局'])
+    Chat.pushSuggestions(['把选中的素材合成一条成片', '再生成一版镜头', '整理一下画布布局'])
   }
 
   async function genShots() {
@@ -244,7 +247,7 @@ window.Agent = (function () {
     card.addNodes(ids)
     Store.setSelection(ids)
     await Chat.pushAgent('成片节点已生成，它同时连着刚才用到的每个素材——这就是画布上的多对一血缘。')
-    Chat.pushSuggestions(['整理一下画布布局', '把成片再延长 3s'])
+    Chat.pushSuggestions(['整理一下画布布局', '基于这段脚本再做一版'])
   }
 
   async function simpleDerive(actionType, actionId, typeLabel) {
@@ -306,14 +309,12 @@ window.Agent = (function () {
 
     if (/整理|排版|布局|对齐/.test(text)) return tidy()
     if (/合成|串成|成片|拼成/.test(text)) return compose()
-    if (/封面/.test(text)) return simpleDerive('video', 'cover', '视频')
-    if (/延长|加长|再来\s*\d*s/.test(text)) return simpleDerive('video', 'extend', '视频')
     if (/(加|新增|添加|插入).*(文本|文字|脚本节点)/.test(text)) return addBlank('text')
     if (/(加|新增|添加|插入).*(图片|图)/.test(text) && !/生成/.test(text)) return addBlank('image')
     if (/(加|新增|添加|插入).*(视频)/.test(text) && !/生成/.test(text)) return addBlank('video')
     if (/分镜/.test(text) && /拆|切|分成|拆成/.test(text)) return genShots()
-    if (/口播|卖点文案|看图写/.test(text) && hasImageSel) return simpleDerive('image', 'copy', '图片')
 
+    if (/再生成|再来一版|换一版|再做一版|多来几版/.test(text)) return simpleDerive('image', 'again', '图片')
     if (/人物|角色|模特|主角/.test(text)) return genImages(text, 'character')
     if (/场景|环境|背景|空镜/.test(text)) return genImages(text, 'scene')
     if (/商品|产品图|静物|礼盒/.test(text) && !/视频/.test(text)) return genImages(text, 'product')
