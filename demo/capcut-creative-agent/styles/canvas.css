@@ -45,12 +45,12 @@
 /* 连线：默认深灰，血缘高亮时转白 */
 .edge-path {
   fill: none;
-  stroke: #3a3a3c;
+  stroke: #48484b;
   stroke-width: 2;
   transition: stroke .16s ease, opacity .16s ease;
 }
 .edge-path.is-active { stroke: #ededed; stroke-width: 2.5; }
-.edge-path.is-dim { opacity: .26; }
+.edge-path.is-dim { opacity: .3; }
 .edge-path.is-pending {
   stroke: #9a9a9a;
   stroke-dasharray: 6 6;
@@ -98,7 +98,7 @@
   border-color: #ededed;
   box-shadow: 0 0 0 1px #ededed, 0 16px 34px rgba(0, 0, 0, .6);
 }
-.node.is-dim { opacity: .4; }
+.node.is-dim { opacity: .52; }
 .node.is-dragging { cursor: grabbing; box-shadow: 0 22px 44px rgba(0, 0, 0, .65); }
 .node.just-created { animation: node-pop .28s cubic-bezier(.2, 1.3, .5, 1); }
 @keyframes node-pop { from { transform: scale(.9); opacity: 0; } }

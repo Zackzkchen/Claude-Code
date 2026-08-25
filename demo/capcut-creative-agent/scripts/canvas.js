@@ -497,7 +497,7 @@ window.Canvas = (function () {
       path.setAttribute('d', d)
       path.setAttribute('class', `edge-path${active ? ' is-active' : ''}${dim ? ' is-dim' : ''}${edge.status === 'pending' ? ' is-pending' : ''}`)
       path.setAttribute('marker-end', 'url(#arrow)')
-      path.style.color = active ? '#ededed' : '#3a3a3c'
+      path.style.color = active ? '#ededed' : '#48484b'
       pathsFrag.appendChild(path)
 
       if (edge.label) {
