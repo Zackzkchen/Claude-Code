@@ -342,7 +342,9 @@ window.Media = (function () {
     const key = `${k}|${prompt}|${w}x${h}`
     if (cache.has(key)) return cache.get(key)
 
-    const seed = U.hash(key)
+    // 种子不含尺寸：同一提示词换分辨率重绘时构图完全一致，
+    // 局部放大预览才能拿到"同一张图的高清版"
+    const seed = U.hash(`${k}|${prompt}`)
     const rnd = U.seeded(seed)
     const palette = PALETTES[k][Math.floor(rnd() * PALETTES[k].length)]
 

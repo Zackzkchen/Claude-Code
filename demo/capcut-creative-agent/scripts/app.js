@@ -59,6 +59,23 @@ window.App = (function () {
       title: `本地${isVideo ? '视频' : '图片'} · ${U.truncate(file.name.replace(/\.[^.]+$/, ''), 8)}`
     })
     U.toast(`已导入本地素材：<span class="k">${U.escapeHtml(U.truncate(file.name, 18))}</span>`)
+    probeMediaSize(nodeId, url, isVideo)
+  }
+
+  /** 读一下本地素材的真实尺寸 / 时长，详情页要展示 */
+  function probeMediaSize(nodeId, url, isVideo) {
+    if (isVideo) {
+      const v = document.createElement('video')
+      v.preload = 'metadata'
+      v.addEventListener('loadedmetadata', () => {
+        Store.patchNode(nodeId, { mediaW: v.videoWidth, mediaH: v.videoHeight, duration: v.duration || 0 })
+      })
+      v.src = url
+      return
+    }
+    const img = new Image()
+    img.onload = () => Store.patchNode(nodeId, { mediaW: img.naturalWidth, mediaH: img.naturalHeight })
+    img.src = url
   }
 
   function createNodeFromFile(file, pos) {
@@ -120,13 +137,21 @@ window.App = (function () {
       <li>多选（<kbd>Shift</kbd>+点选，或 <kbd>Shift</kbd>+空白拖拽框选）→「合成为一条成片」，形成多对一血缘</li>
       <li>连线标签显示生成关系；选中节点会高亮它的整条血缘链，其余淡出；卡片底部「来自：…」可一键回溯父节点</li>
     </ul>
-    <h4>四、对话与画布联动</h4>
+    <h4>四、查看详情 = 局部放大预览</h4>
+    <ul>
+      <li>每张卡片右上角有 <kbd>⤢</kbd>，或选中后点悬浮条「查看详情」，或直接<b>双击卡片</b></li>
+      <li>预览页不是另一套界面：它就是<b>把这块画布放大</b>——同样的卡片、同样的连线标签、同样的滚轮缩放 / 拖拽平移，只把范围收敛到「当前节点 + 直接上下游 + 同批产物」</li>
+      <li>右侧详情栏给的是卡片上放不下的信息：来源、提示词、血缘路径（可点跳转）、下游产物、以及"以它为素材继续生成"</li>
+      <li>预览里点上游 / 下游卡片可以继续深入；<kbd>←</kbd> <kbd>→</kbd> 在同批产物间横向翻看；<kbd>Esc</kbd> 返回画布</li>
+      <li>退出后画布本体已经停在你刚看的那个节点上，视线是连续的</li>
+    </ul>
+    <h4>五、对话与画布联动</h4>
     <ul>
       <li>选中节点后，输入框上方出现上下文胶囊，指令默认作用于该节点</li>
       <li>Agent 回复带任务卡：分步状态 + 产出节点列表，点节点条目可飞行定位到画布</li>
       <li>Agent 执行时画布顶部出现「Agent 正在操作画布」，新建节点带高亮呼吸</li>
     </ul>
-    <h4>五、编辑与安全</h4>
+    <h4>六、编辑与安全</h4>
     <ul>
       <li>拖拽移动（多选可整组移动）、<kbd>Delete</kbd> 删除、<kbd>Ctrl/⌘+Z</kbd> 撤销 / <kbd>Shift+Z</kbd> 重做、<kbd>Ctrl/⌘+A</kbd> 全选</li>
       <li>删除节点会同时清理它的连线；撤销可回到删除前</li>
@@ -185,6 +210,7 @@ window.App = (function () {
   /* ---------------- 装配 ---------------- */
   function init() {
     Canvas.init()
+    Preview.init()
     Chat.init((text) => Agent.handle(text))
 
     document.getElementById('dock-text').addEventListener('click', () => createTextNode())

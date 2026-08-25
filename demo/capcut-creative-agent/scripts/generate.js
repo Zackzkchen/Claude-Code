@@ -169,6 +169,9 @@ window.Generate = (function () {
       mediaKind: 'ai',
       title: opts.title || `${node.type === 'video' ? '视频' : '图片'} · ${U.truncate(prompt, 8)}`
     }
+    patch.mediaW = w
+    patch.mediaH = h
+    patch.posterKind = kind
     if (node.type === 'video') {
       patch.poster = url
       patch.duration = opts.duration || 5

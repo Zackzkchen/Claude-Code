@@ -180,7 +180,12 @@ window.Canvas = (function () {
     })
 
     R.viewport.addEventListener('dblclick', (e) => {
-      if (e.target.closest('.node')) return
+      const nodeEl = e.target.closest('.node')
+      if (nodeEl) {
+        // 双击节点 = 凑近看它（与「查看详情」同一个入口）
+        if (!e.target.closest('textarea, input')) window.Preview.open(nodeEl.dataset.id)
+        return
+      }
       const p = screenToWorld(e.clientX, e.clientY)
       window.App.createTextNode({ x: p.x - Store.SIZE.text.w / 2, y: p.y - Store.SIZE.text.h / 2 })
     })
@@ -258,6 +263,8 @@ window.Canvas = (function () {
 
   function bindKeyboard() {
     window.addEventListener('keydown', (e) => {
+      // 预览页打开时，快捷键归它管
+      if (window.Preview?.isOpen()) return
       const typing = /^(input|textarea)$/i.test(e.target.tagName) || e.target.isContentEditable
       if (e.code === 'Space' && !typing) {
         spaceDown = true
@@ -304,7 +311,9 @@ window.Canvas = (function () {
       if (!act) return
       const nodes = Store.selectedNodes()
       if (!nodes.length) return
-      if (act === 'generate') {
+      if (act === 'detail') {
+        window.Preview.open(nodes[0].id)
+      } else if (act === 'generate') {
         const rect = e.target.getBoundingClientRect()
         openGenMenu(nodes, { x: rect.left, y: rect.bottom + 6 })
       } else if (act === 'delete') {
@@ -535,7 +544,16 @@ window.Canvas = (function () {
     el.appendChild(U.el('div', { class: 'node-head' }, [
       U.el('span', { class: 'node-kind', text: KIND_ICON[node.type] }),
       U.el('span', { class: 'node-title' }),
-      U.el('span', { class: 'node-badge' })
+      U.el('span', { class: 'node-badge' }),
+      U.el('button', {
+        class: 'node-expand',
+        text: '⤢',
+        title: '查看详情（局部放大预览）',
+        onclick: (e) => {
+          e.stopPropagation()
+          window.Preview.open(node.id)
+        }
+      })
     ]))
     el.appendChild(U.el('div', { class: 'node-body' }))
     el.appendChild(U.el('div', { class: 'node-foot' }, [
@@ -868,6 +886,8 @@ window.Canvas = (function () {
 
   return {
     init, render, applyViewport, screenToWorld, worldToScreen, viewCenter,
-    zoomBy, resetZoom, fitView, focusNode, flashNode, openGenMenu, closeGenMenu
+    zoomBy, resetZoom, fitView, focusNode, flashNode, openGenMenu, closeGenMenu,
+    // 供局部放大预览页复用，保证两处的卡片、连线完全一致
+    mediaBody: buildMediaBody, badgeOf: badgeFor, edgeGeometry: edgePath, KIND_ICON
   }
 })()

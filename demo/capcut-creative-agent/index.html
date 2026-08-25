@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="./styles/base.css" />
 <link rel="stylesheet" href="./styles/canvas.css" />
 <link rel="stylesheet" href="./styles/chat.css" />
+<link rel="stylesheet" href="./styles/preview.css" />
 </head>
 <body>
   <!-- 模拟剪映 PC 客户端外壳 -->
@@ -105,6 +106,7 @@
 
         <!-- 节点悬浮操作条（单例，跟随选中节点） -->
         <div class="node-toolbar" id="node-toolbar" hidden>
+          <button data-act="detail">查看详情</button>
           <button data-act="generate" class="strong"><span class="spark">✦</span>生成</button>
           <button data-act="edit">编辑</button>
           <button data-act="duplicate">复制</button>
@@ -115,6 +117,42 @@
         <div class="gen-menu" id="gen-menu" hidden>
           <div class="gen-menu-head" id="gen-menu-head">以「节点」为素材继续生成</div>
           <div class="gen-menu-list" id="gen-menu-list"></div>
+        </div>
+
+        <!-- 局部放大预览页：盖住画布区，右侧对话仍可用 -->
+        <div class="preview-layer" id="preview-layer" hidden>
+          <header class="preview-head">
+            <button class="ghost-btn small" id="preview-back">← 返回画布</button>
+            <div class="preview-title">
+              <span class="node-kind" id="preview-kind">T</span>
+              <strong id="preview-name">节点</strong>
+              <span class="node-badge" id="preview-badge"></span>
+              <span class="preview-scope">局部放大预览 · 含直接上下游</span>
+            </div>
+            <div class="preview-head-right">
+              <button class="tool-btn" id="preview-prev" title="上一个同级节点 ←">‹</button>
+              <button class="tool-btn" id="preview-next" title="下一个同级节点 →">›</button>
+              <div class="zoom-group">
+                <button class="tool-btn icon" id="preview-zoom-out" title="缩小">−</button>
+                <button class="tool-btn zoom-label" id="preview-zoom-fit" title="适配">100%</button>
+                <button class="tool-btn icon" id="preview-zoom-in" title="放大">＋</button>
+              </div>
+              <button class="tool-btn" id="preview-locate">在画布中定位</button>
+            </div>
+          </header>
+          <div class="preview-body">
+            <div class="preview-stage" id="preview-stage">
+              <div class="preview-world" id="preview-world">
+                <svg class="edge-layer" id="preview-edge-layer" xmlns="http://www.w3.org/2000/svg">
+                  <g id="preview-edge-paths"></g>
+                  <g id="preview-edge-labels"></g>
+                </svg>
+                <div class="node-layer" id="preview-nodes"></div>
+              </div>
+              <div class="preview-hint">滚轮缩放 · 拖拽平移 · 点上下游卡片可继续深入 · Esc 返回</div>
+            </div>
+            <aside class="preview-side" id="preview-side"></aside>
+          </div>
         </div>
       </section>
 
@@ -167,6 +205,7 @@
   <script src="./scripts/media.js"></script>
   <script src="./scripts/store.js"></script>
   <script src="./scripts/canvas.js"></script>
+  <script src="./scripts/preview.js"></script>
   <script src="./scripts/generate.js"></script>
   <script src="./scripts/chat.js"></script>
   <script src="./scripts/agent.js"></script>
