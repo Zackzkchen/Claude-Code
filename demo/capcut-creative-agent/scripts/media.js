@@ -1,28 +1,29 @@
 /* 程序化生成"AI 素材"占位图：完全离线，同一提示词稳定产出同一张图。
    demo 里所有 AI 生成的图片 / 视频封面都来自这里。 */
 window.Media = (function () {
+  /* 单色调色板：每组是 [暗部, 中间调, 亮部]，只有明度差别 */
   const PALETTES = {
     character: [
-      ['#2b1c3a', '#6d3f7a', '#ffb9a3'],
-      ['#101d33', '#2e5a8f', '#ffd9b3'],
-      ['#301b1b', '#8c4a3a', '#ffe0c2'],
-      ['#1b2430', '#4b6b8a', '#f2d6c4']
+      ['#131313', '#3c3c3c', '#e4e4e4'],
+      ['#0d0d0d', '#4e4e4e', '#d0d0d0'],
+      ['#1a1a1a', '#5c5c5c', '#f2f2f2'],
+      ['#101010', '#2c2c2c', '#bfbfbf']
     ],
     scene: [
-      ['#0d1b2a', '#1f6f7a', '#ffd166'],
-      ['#20122b', '#6b3f8f', '#ffa1c4'],
-      ['#0f1f16', '#2f7a55', '#e8f5a1'],
-      ['#241408', '#a35a2a', '#ffd08a']
+      ['#0c0c0c', '#484848', '#eaeaea'],
+      ['#141414', '#383838', '#d2d2d2'],
+      ['#101010', '#585858', '#f4f4f4'],
+      ['#171717', '#2a2a2a', '#c2c2c2']
     ],
     product: [
-      ['#101215', '#2a3340', '#8fd0ff'],
-      ['#181017', '#3d2436', '#ffc2d6'],
-      ['#0f1512', '#22382c', '#a8f0c8'],
-      ['#15120a', '#3a3018', '#ffdf9e']
+      ['#0e0e0e', '#333333', '#f0f0f0'],
+      ['#121212', '#414141', '#dcdcdc'],
+      ['#0a0a0a', '#2a2a2a', '#cacaca'],
+      ['#161616', '#4c4c4c', '#ededed']
     ],
     generic: [
-      ['#121722', '#2b3a55', '#8fb6ff'],
-      ['#1a1424', '#40305c', '#c6a8ff']
+      ['#101010', '#343434', '#d8d8d8'],
+      ['#0d0d0d', '#454545', '#c4c4c4']
     ]
   }
 
@@ -55,7 +56,7 @@ window.Media = (function () {
     const headY = h * 0.36
 
     // 肩部
-    ctx.fillStyle = 'rgba(12,14,20,.55)'
+    ctx.fillStyle = 'rgba(14,14,14,.55)'
     ctx.beginPath()
     ctx.moveTo(cx - w * 0.34, h)
     ctx.quadraticCurveTo(cx, h * 0.56, cx + w * 0.34, h)
@@ -105,7 +106,7 @@ window.Media = (function () {
     while (x < w) {
       const bw = w * (0.08 + rnd() * 0.1)
       const bh = h * (0.22 + rnd() * 0.44)
-      ctx.fillStyle = `rgba(8,10,16,${0.55 + rnd() * 0.35})`
+      ctx.fillStyle = `rgba(10,10,10,${0.55 + rnd() * 0.35})`
       ctx.fillRect(x, h - bh, bw, bh)
       // 亮着的窗
       for (let wy = h - bh + h * 0.03; wy < h - h * 0.05; wy += h * 0.055) {
@@ -136,7 +137,7 @@ window.Media = (function () {
     const wh = h * 0.46
     ctx.fillStyle = `${accent}dd`
     ctx.fillRect(wx, wy, ww, wh)
-    ctx.strokeStyle = 'rgba(10,12,18,.85)'
+    ctx.strokeStyle = 'rgba(12,12,12,.85)'
     ctx.lineWidth = Math.max(2, w * 0.008)
     ctx.strokeRect(wx, wy, ww, wh)
     ctx.beginPath()
@@ -160,7 +161,7 @@ window.Media = (function () {
     ctx.restore()
 
     // 桌面与静物剪影
-    ctx.fillStyle = 'rgba(8,10,15,.7)'
+    ctx.fillStyle = 'rgba(10,10,10,.7)'
     ctx.fillRect(0, h * 0.78, w, h * 0.22)
     ctx.beginPath()
     ctx.ellipse(w * 0.24, h * 0.78, w * 0.07, h * 0.11, 0, Math.PI, 0)
@@ -197,7 +198,7 @@ window.Media = (function () {
     const layers = 3
     for (let i = 0; i < layers; i++) {
       const base = h * (0.62 + i * 0.11)
-      ctx.fillStyle = `rgba(6,9,14,${0.34 + i * 0.24})`
+      ctx.fillStyle = `rgba(9,9,9,${0.34 + i * 0.24})`
       ctx.beginPath()
       ctx.moveTo(0, h)
       ctx.lineTo(0, base)
@@ -269,12 +270,12 @@ window.Media = (function () {
     const bg = ctx.createLinearGradient(bx, by, bx + bw, by + bh)
     bg.addColorStop(0, 'rgba(255,255,255,.94)')
     bg.addColorStop(0.45, accent)
-    bg.addColorStop(1, 'rgba(20,24,32,.92)')
+    bg.addColorStop(1, 'rgba(24,24,24,.92)')
     ctx.fillStyle = bg
     ctx.fill()
 
     // 瓶盖
-    ctx.fillStyle = 'rgba(18,20,28,.9)'
+    ctx.fillStyle = 'rgba(20,20,20,.9)'
     ctx.fillRect(bx + bw * 0.3, by - h * 0.06, bw * 0.4, h * 0.06)
 
     // 高光

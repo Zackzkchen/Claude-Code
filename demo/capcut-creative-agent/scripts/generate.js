@@ -1,11 +1,5 @@
 /* 派生生成：菜单动作定义 + 生成过程模拟 + 血缘连线 */
 window.Generate = (function () {
-  const COLOR = {
-    text: 'linear-gradient(135deg,#ffd88a,#ffab5e)',
-    image: 'linear-gradient(135deg,#8fd0ff,#5b8cff)',
-    video: 'linear-gradient(135deg,#ffa1c4,#c07bff)'
-  }
-
   const ACTIONS = {
     text: [
       {
@@ -71,13 +65,9 @@ window.Generate = (function () {
       const types = new Set(nodes.map((n) => n.type))
       const list = [COMPOSE]
       if (types.size === 1) list.push({ sep: true }, ...ACTIONS[nodes[0].type])
-      return withColor(list)
+      return list
     }
-    return withColor(ACTIONS[nodes[0].type] || [])
-  }
-
-  function withColor(list) {
-    return list.map((a) => (a.sep ? a : { ...a, color: COLOR[a.to] }))
+    return ACTIONS[nodes[0].type] || []
   }
 
   /* ---------------- 文本内容模板 ---------------- */

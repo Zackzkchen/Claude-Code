@@ -390,7 +390,7 @@ window.Canvas = (function () {
           window.Generate.run(nodes, action)
         }
       }, [
-        U.el('span', { class: 'ic', text: KIND_ICON[action.to], style: { background: action.color } }),
+        U.el('span', { class: `ic ic-${action.to}`, text: KIND_ICON[action.to] }),
         U.el('span', { class: 'tx' }, [
           document.createTextNode(action.label),
           U.el('em', { text: action.desc })
@@ -497,7 +497,7 @@ window.Canvas = (function () {
       path.setAttribute('d', d)
       path.setAttribute('class', `edge-path${active ? ' is-active' : ''}${dim ? ' is-dim' : ''}${edge.status === 'pending' ? ' is-pending' : ''}`)
       path.setAttribute('marker-end', 'url(#arrow)')
-      path.style.color = active ? '#5b8cff' : '#3b4354'
+      path.style.color = active ? '#ededed' : '#3a3a3c'
       pathsFrag.appendChild(path)
 
       if (edge.label) {
