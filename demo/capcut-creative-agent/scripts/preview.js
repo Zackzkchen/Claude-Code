@@ -172,9 +172,8 @@ window.Preview = (function () {
 
   function card(node, sc) {
     const isTarget = node.id === sc.node.id
-    const badge = Canvas.badgeOf(node)
     const el = U.el('div', {
-      class: `node${isTarget ? ' is-target is-selected' : ''}`,
+      class: `node${isTarget ? ' is-target is-selected' : ''}${node.kind === 'final' ? ' is-final' : ''}`,
       'data-type': node.type,
       'data-id': node.id,
       style: {
@@ -185,28 +184,16 @@ window.Preview = (function () {
     })
 
     el.appendChild(U.el('div', { class: 'preview-role', text: roleOf(node, sc) }))
-    el.appendChild(U.el('div', { class: 'node-head' }, [
-      U.el('span', { class: 'node-kind', text: Canvas.KIND_ICON[node.type] }),
-      U.el('span', { class: 'node-title', text: node.title }),
-      badge.text ? U.el('span', { class: `node-badge ${badge.cls}`, text: badge.text }) : null
-    ]))
-
     el.appendChild(U.el('div', { class: 'node-body' }, [body(node, isTarget)]))
 
     const parents = Store.parentsOf(node.id)
-    const children = Store.childrenOf(node.id)
-    el.appendChild(U.el('div', { class: 'node-foot' }, [
-      U.el('span', {
-        class: 'from',
-        text: parents.length > 1
-          ? `来自 ${parents.length} 个素材`
-          : parents.length === 1
-            ? `来自：${U.truncate(parents[0].title, 10)}`
-            : node.source === 'upload' ? '本地上传' : node.source === 'agent' ? 'Agent 创建' : '手动创建'
-      }),
-      U.el('span', { class: 'spacer' }),
-      U.el('span', { class: 'cnt', text: children.length ? `↳ ${children.length} 个派生` : '' })
-    ]))
+    const from = parents.length > 1
+      ? `${parents.length} 个素材`
+      : parents.length === 1 ? U.truncate(parents[0].title, 10) : ''
+    el.appendChild(U.el('div', {
+      class: 'node-meta always',
+      html: `<b>${U.escapeHtml(U.truncate(node.title, 18))}</b>${from ? ` <span class="from">← ${U.escapeHtml(from)}</span>` : ''}`
+    }))
 
     if (!isTarget) {
       el.addEventListener('click', () => setTarget(node.id))
@@ -307,16 +294,24 @@ window.Preview = (function () {
     return '手动创建'
   }
 
+  function statusText(node) {
+    if (node.status === 'generating') return `生成中 ${Math.round((node.progress || 0) * 100)}%`
+    if (node.status === 'failed') return '生成失败'
+    if (node.status === 'empty') return '待添加素材'
+    if (node.status === 'prompt') return '待输入提示词'
+    return ''
+  }
+
   function metaRows(node) {
     const rows = [
       ['类型', `${Store.TYPE_LABEL[node.type]}${node.kind && Store.KIND_LABEL[node.kind] ? ` · ${Store.KIND_LABEL[node.kind]}` : ''}`],
-      ['来源', sourceLabel(node)],
-      ['状态', node.status === 'ready' ? '已完成' : node.status === 'generating' ? `生成中 ${Math.round((node.progress || 0) * 100)}%` : node.status === 'empty' ? '待添加素材' : node.status === 'prompt' ? '待生成' : '生成失败']
+      ['来源', sourceLabel(node)]
     ]
+    const st = statusText(node)
+    if (st) rows.push(['状态', st])
     if (node.type === 'video' && node.duration) rows.push(['时长', Media.formatDuration(node.duration)])
     if (node.type === 'text') rows.push(['字数', `${(node.text || '').replace(/\s/g, '').length} 字`])
     if (node.type !== 'text' && node.mediaW) rows.push(['素材尺寸', `${node.mediaW} × ${node.mediaH}`])
-    rows.push(['创建时间', new Date(node.createdAt).toLocaleTimeString('zh-CN', { hour12: false })])
     return rows
   }
 
@@ -392,9 +387,9 @@ window.Preview = (function () {
           close()
           Store.setSelection([id])
           Canvas.focusNode(id).then(() => {
-            const handle = document.querySelector(`.node[data-id="${id}"] .node-handle`)
-            const r = handle?.getBoundingClientRect()
-            Canvas.openGenMenu([Store.nodeById(id)], r ? { x: r.right + 8, y: r.top - 10 } : { x: 200, y: 200 })
+            const card = document.querySelector(`.node[data-id="${id}"]`)
+            const r = card?.getBoundingClientRect()
+            Canvas.openGenMenu([Store.nodeById(id)], r ? { x: r.right + 10, y: r.top } : { x: 200, y: 200 })
           })
         }
       }),
@@ -442,14 +437,11 @@ window.Preview = (function () {
     const sc = scope()
     if (!sc.node) return
 
-    const badge = Canvas.badgeOf(sc.node)
     R.kind.textContent = Canvas.KIND_ICON[sc.node.type]
-    R.kind.className = 'node-kind'
     R.name.textContent = sc.node.title
-    R.badge.className = `node-badge ${badge.cls}`
-    R.badge.textContent = badge.text
-    R.badge.hidden = !badge.text
-    // 让头部徽标沿用画布上同类型节点的填充方式
+    const status = statusText(sc.node)
+    R.badge.textContent = status
+    R.badge.hidden = !status
     R.kind.closest('.preview-title').dataset.type = sc.node.type
 
     R.nodes.replaceChildren(...sc.all.map((n) => card(n, sc)))

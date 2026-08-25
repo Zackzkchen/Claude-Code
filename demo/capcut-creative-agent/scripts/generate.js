@@ -1,70 +1,72 @@
 /* 派生生成：菜单动作定义 + 生成过程模拟 + 血缘连线 */
 window.Generate = (function () {
+  /**
+   * 画布上手动可用的派生动作 —— 只留最基础的几条。
+   * mode: 'instant' 立刻开始生成（父节点内容已经足够当提示词）
+   *       'prompt'  先落一个带参考图的空节点，等用户补一句再生成
+   */
   const ACTIONS = {
     text: [
       {
-        id: 'character', label: '生成人物图', desc: '从脚本提取角色形象', to: 'image', kind: 'character',
-        edge: '生成人物图', count: 2, variants: ['女主角 · 正面特写', '女主角 · 侧脸中景'],
-        hint: '人物特写，柔光，胶片质感，竖构图'
+        id: 't2i', label: '文生图', to: 'image', kind: 'ai', edge: '文生图', count: 1,
+        mode: 'instant', hint: '按脚本生成画面，电影感光线'
       },
       {
-        id: 'scene', label: '生成场景图', desc: '按脚本生成环境氛围', to: 'image', kind: 'scene',
-        edge: '生成场景图', count: 2, variants: ['清晨街巷', '室内暖光'],
-        hint: '场景氛围，浅景深，电影感光线'
+        id: 't2v', label: '文生视频', to: 'video', kind: 'ai', edge: '文生视频', count: 1,
+        mode: 'instant', hint: '按脚本生成连续镜头，竖屏 9:16'
       },
       {
-        id: 'product', label: '生成商品图', desc: '突出卖点的商品静物', to: 'image', kind: 'product',
-        edge: '生成商品图', count: 2, variants: ['主图 · 正面', '细节 · 质感特写'],
-        hint: '商品静物，柔光棚拍，高级质感'
-      },
-      { sep: true },
-      {
-        id: 't2v', label: '直接生成视频', desc: '文生视频，5s 竖屏', to: 'video', kind: 'ai',
-        edge: '文生视频', count: 1, variants: ['文生视频 5s'], hint: '按脚本生成连续镜头，竖屏 9:16'
-      },
-      {
-        id: 'shots', label: '拆分镜脚本', desc: '拆成 3 条分镜文本', to: 'text', kind: 'shot',
-        edge: '拆分镜', count: 3, variants: ['分镜 1', '分镜 2', '分镜 3']
+        id: 'shots', label: '拆分镜', hintText: '1 → 3', to: 'text', kind: 'shot', edge: '拆分镜',
+        count: 3, mode: 'instant', variants: ['分镜 1', '分镜 2', '分镜 3']
       }
     ],
     image: [
       {
-        id: 'i2v', label: '图生视频', desc: '以该图为首帧生成运镜', to: 'video', kind: 'ai',
-        edge: '图生视频', count: 1, variants: ['图生视频 5s'], hint: '以该图为首帧，缓慢推镜'
+        id: 'i2v', label: '图生视频', to: 'video', kind: 'ai', edge: '图生视频', count: 1,
+        mode: 'prompt', hint: '以该图为首帧'
       },
       {
-        id: 'variant', label: '生成同系列图', desc: '保持风格换角度', to: 'image', kind: 'same',
-        edge: '同系列图', count: 2, variants: ['换角度 A', '换角度 B'], hint: '同风格不同机位'
-      },
-      { sep: true },
-      {
-        id: 'copy', label: '看图写文案', desc: '生成口播 / 卖点文案', to: 'text', kind: 'copy',
-        edge: '看图写文案', count: 1, variants: ['口播文案']
+        id: 'again', label: '再生成一版', to: 'image', kind: 'same', edge: '再生成', count: 1,
+        mode: 'instant'
       }
     ],
-    video: [
-      {
-        id: 'cover', label: '提取封面图', desc: '取一帧做封面', to: 'image', kind: 'cover',
-        edge: '提取封面', count: 1, variants: ['封面图'], hint: '高信息量首帧'
-      },
-      {
-        id: 'extend', label: '延长镜头 3s', desc: '续接同风格镜头', to: 'video', kind: 'ai',
-        edge: '延长镜头', count: 1, variants: ['延长 3s'], hint: '延续上一镜头运动'
-      }
-    ]
+    // 视频是链路终点：提取封面 / 延长镜头这类低频动作已砍掉，多选合成仍然可用
+    video: []
+  }
+
+  /** Agent 用的语义化动作（画布菜单里不出现，避免把三选一的复杂度摊给所有人） */
+  const SEMANTIC = {
+    character: {
+      id: 'character', label: '生成人物图', to: 'image', kind: 'character', edge: '文生图',
+      count: 2, mode: 'instant', variants: ['女主角 · 正面特写', '女主角 · 侧脸中景'],
+      hint: '人物特写，柔光，胶片质感，竖构图'
+    },
+    scene: {
+      id: 'scene', label: '生成场景图', to: 'image', kind: 'scene', edge: '文生图',
+      count: 2, mode: 'instant', variants: ['清晨街巷', '室内暖光'],
+      hint: '场景氛围，浅景深，电影感光线'
+    },
+    product: {
+      id: 'product', label: '生成商品图', to: 'image', kind: 'product', edge: '文生图',
+      count: 2, mode: 'instant', variants: ['主图 · 正面', '细节 · 质感特写'],
+      hint: '商品静物，柔光棚拍，高级质感'
+    }
   }
 
   const COMPOSE = {
-    id: 'compose', label: '合成为一条成片', desc: '把选中素材串成完整视频', to: 'video', kind: 'final',
-    edge: '合成成片', count: 1, variants: ['成片 · 竖屏'], hint: '按素材顺序合成，带转场与配乐', multiParent: true
+    id: 'compose', label: '合成为一条成片', to: 'video', kind: 'final', edge: '合成',
+    count: 1, mode: 'instant', hint: '按素材顺序合成，带转场与配乐', multiParent: true
   }
+
+  /** 让 'prompt' 模式的动作立刻生成（Agent 自己会给提示词，不需要用户再补） */
+  const instant = (action) => ({ ...action, mode: 'instant' })
 
   function actionsFor(nodes) {
     if (!nodes.length) return []
     if (nodes.length > 1) {
       const types = new Set(nodes.map((n) => n.type))
-      const list = [COMPOSE]
-      if (types.size === 1) list.push({ sep: true }, ...ACTIONS[nodes[0].type])
+      const list = [{ ...COMPOSE, label: `合成为一条成片（${nodes.length}）` }]
+      if (types.size === 1) list.push(...(ACTIONS[nodes[0].type] || []))
       return list
     }
     return ACTIONS[nodes[0].type] || []
@@ -140,9 +142,10 @@ window.Generate = (function () {
       return Media.subKind(null, parent?.prompt || parent?.title)
     }
     if (action && ['character', 'scene', 'product'].includes(action.kind)) return action.kind
-    const kind = Media.subKind(null, node.prompt)
-    // 视频兜底给场景，避免出现太抽象的封面
-    return kind === 'generic' && node.type === 'video' ? 'scene' : kind
+    // 文生图/文生视频：拿父文本整段来判风格，比只看标题准得多
+    const kind = Media.subKind(null, `${parent?.text || ''} ${node.prompt || ''}`)
+    // 兜底给场景，避免出现过于抽象的画面
+    return kind === 'generic' ? 'scene' : kind
   }
 
   /** 把一个空节点变成"已生成"节点（节点内 AI 生成入口 / 重试都走这里） */
@@ -212,18 +215,24 @@ window.Generate = (function () {
     const created = []
     const tasks = []
 
+    const waitForPrompt = action.mode === 'prompt'
+
     const spawn = (parentsForNode, indexInBatch, batchSize, anchor) => {
       const spot = Store.childSpot(anchor, indexInBatch, batchSize, action.to)
       const variant = action.variants?.[indexInBatch % action.variants.length] || ''
       const topic = topicOf(anchor)
       // 变体写进提示词，保证同一批产出的素材彼此不同
       const prompt = [topic, action.hint, variant].filter(Boolean).join('，')
-      const titleMap = {
-        image: `${Store.KIND_LABEL[action.kind] || '图片'}${variant ? ` · ${variant}` : ''}`,
-        video: action.kind === 'final' ? `成片 · ${list.length * 5}s 竖屏` : `视频 · ${variant || 'AI 生成'}`,
-        text: `${Store.KIND_LABEL[action.kind] || '文本'}${variant ? ` · ${variant}` : ''}`
-      }
       const isFinal = action.kind === 'final'
+      const titleMap = {
+        image: action.kind === 'same'
+          ? `${U.truncate(anchor.title, 8)} · 变体`
+          : `${action.kind === 'ai' ? '图' : Store.KIND_LABEL[action.kind] || '图'} · ${variant || U.truncate(topic, 8)}`,
+        video: isFinal
+          ? `成片 · ${list.length * 5}s`
+          : `视频 · ${action.id === 'i2v' ? '图生视频' : U.truncate(topic, 8)}`,
+        text: variant || `${Store.KIND_LABEL[action.kind] || '文本'}`
+      }
       const node = Store.addNode({
         type: action.to,
         kind: action.kind === 'same' ? (anchor.kind || 'ai') : action.kind,
@@ -231,16 +240,19 @@ window.Generate = (function () {
         x: spot.x,
         y: spot.y,
         // 成片是链路终点，卡片给得更大一些
-        w: isFinal ? 340 : undefined,
-        h: isFinal ? 288 : undefined,
-        status: action.to === 'text' ? 'ready' : 'generating',
+        w: isFinal ? 360 : undefined,
+        h: isFinal ? 203 : undefined,
+        // 'prompt' 模式先落一个待输入的空节点，参考图挂在 refs 上
+        status: waitForPrompt ? 'prompt' : action.to === 'text' ? 'ready' : 'generating',
         progress: 0,
-        prompt,
+        prompt: waitForPrompt ? '' : prompt,
+        refs: parentsForNode.map((p) => p.id),
         source: opts.source || 'ai',
         loadingLabel: action.to === 'video' ? 'AI 正在生成视频…' : 'AI 正在生成图片…'
       })
       parentsForNode.forEach((p) => Store.addEdge(p.id, node.id, action.edge, 'pending'))
       created.push(node.id)
+      if (waitForPrompt) return
 
       const job = (async () => {
         await U.sleep(indexInBatch * 260)
@@ -252,7 +264,7 @@ window.Generate = (function () {
             kind,
             source: opts.source || 'ai',
             title: titleMap[action.to],
-            duration: action.kind === 'final' ? list.length * 5 : action.id === 'extend' ? 3 : 5
+            duration: isFinal ? list.length * 5 : 5
           })
         }
       })()
@@ -274,10 +286,20 @@ window.Generate = (function () {
     }
     created.forEach((id) => Canvas.flashNode(id))
 
+    // 待输入的空节点：直接选中并把光标放进提示词框
+    if (waitForPrompt) {
+      Store.setSelection(created)
+      Canvas.focusPromptInput(created[0])
+      return created
+    }
+
     await Promise.all(tasks)
     if (opts.select !== false) Store.setSelection(created)
     return created
   }
 
-  return { ACTIONS, COMPOSE, actionsFor, run, generateInto, typeText, makeScript, makeCopy, topicOf }
+  return {
+    ACTIONS, SEMANTIC, COMPOSE, instant, actionsFor,
+    run, generateInto, typeText, makeScript, makeCopy, topicOf
+  }
 })()

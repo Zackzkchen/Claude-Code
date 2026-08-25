@@ -1,10 +1,11 @@
-/* 无限画布：视口（平移/缩放）、节点渲染、血缘连线、选区、节点内交互 */
+/* 无限画布：视口（平移/缩放）、节点渲染、血缘连线、选区、节点内交互
+   卡片默认只显示内容本身；功能收在 hover / 选中才浮出的「凸巴」和右键菜单里。 */
 window.Canvas = (function () {
   const nodeEls = new Map()
+  const editing = new Set() // 正在文本编辑态的节点
   let R = {}
   let spaceDown = false
-  let interaction = null // 当前手势：pan / drag / marquee
-  let genMenuCtx = null
+  let interaction = null // pan / drag / marquee
 
   const KIND_ICON = { text: 'T', image: '▣', video: '▶' }
 
@@ -19,10 +20,6 @@ window.Canvas = (function () {
       edgePaths: document.getElementById('edge-paths'),
       edgeLabels: document.getElementById('edge-labels'),
       marquee: document.getElementById('marquee'),
-      toolbar: document.getElementById('node-toolbar'),
-      genMenu: document.getElementById('gen-menu'),
-      genMenuHead: document.getElementById('gen-menu-head'),
-      genMenuList: document.getElementById('gen-menu-list'),
       meta: document.getElementById('canvas-meta'),
       empty: document.getElementById('canvas-empty'),
       zoomLabel: document.getElementById('btn-zoom-reset')
@@ -30,7 +27,6 @@ window.Canvas = (function () {
 
     bindViewport()
     bindKeyboard()
-    bindToolbar()
     bindDropZone()
 
     Store.subscribe(() => render())
@@ -48,7 +44,6 @@ window.Canvas = (function () {
     R.grid.style.backgroundSize = `${step}px ${step}px`
     R.grid.style.backgroundPosition = `${x}px ${y}px`
     R.zoomLabel.textContent = `${Math.round(scale * 100)}%`
-    positionToolbar()
   }
 
   function paneRect() { return R.viewport.getBoundingClientRect() }
@@ -141,7 +136,6 @@ window.Canvas = (function () {
     setTimeout(() => el.classList.remove('agent-flash'), 1200)
   }
 
-  /** 视口中心（世界坐标），用于在可视区域新增节点 */
   function viewCenter() {
     const rect = paneRect()
     return screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2)
@@ -158,21 +152,18 @@ window.Canvas = (function () {
         applyViewport()
         return
       }
-      const factor = Math.pow(0.999, e.deltaY * (e.ctrlKey || e.metaKey ? 2.4 : 1.1))
-      zoomAt(vp().scale * factor, e.clientX, e.clientY)
+      zoomAt(vp().scale * Math.pow(0.999, e.deltaY * (e.ctrlKey || e.metaKey ? 2.4 : 1.1)), e.clientX, e.clientY)
     }, { passive: false })
 
     R.viewport.addEventListener('pointerdown', (e) => {
       const nodeEl = e.target.closest('.node')
-      closeGenMenu()
+      UI.closeMenu()
 
-      // 中键 / 空格：平移
       if (e.button === 1 || spaceDown || (e.button === 0 && !nodeEl && e.altKey)) {
         startPan(e)
         return
       }
-      if (nodeEl) return // 节点自身的 pointerdown 处理
-
+      if (nodeEl) return
       if (e.button !== 0) return
       // 空白处：默认拖拽平移（面向大众用户更好上手），Shift+拖拽才是框选
       if (e.shiftKey) startMarquee(e)
@@ -182,12 +173,31 @@ window.Canvas = (function () {
     R.viewport.addEventListener('dblclick', (e) => {
       const nodeEl = e.target.closest('.node')
       if (nodeEl) {
-        // 双击节点 = 凑近看它（与「查看详情」同一个入口）
-        if (!e.target.closest('textarea, input')) window.Preview.open(nodeEl.dataset.id)
+        if (e.target.closest('textarea, input, button')) return
+        const node = Store.nodeById(nodeEl.dataset.id)
+        if (!node) return
+        // 文本的主操作是改字，媒体的主操作是看大图
+        if (node.type === 'text') startEditing(node.id)
+        else if (node.status === 'ready') window.Preview.open(node.id)
         return
       }
       const p = screenToWorld(e.clientX, e.clientY)
       window.App.createTextNode({ x: p.x - Store.SIZE.text.w / 2, y: p.y - Store.SIZE.text.h / 2 })
+    })
+
+    // 画布空白右键
+    R.viewport.addEventListener('contextmenu', (e) => {
+      if (e.target.closest('.node')) return
+      e.preventDefault()
+      const p = screenToWorld(e.clientX, e.clientY)
+      UI.menu([
+        { label: '新建文本', hint: '双击空白', onClick: () => window.App.createTextNode({ x: p.x, y: p.y }) },
+        { label: '新建图片', onClick: () => window.App.createMediaNode('image', { x: p.x, y: p.y }) },
+        { label: '新建视频', onClick: () => window.App.createMediaNode('video', { x: p.x, y: p.y }) },
+        { sep: true },
+        { label: '整理布局', onClick: () => { Store.tidyLayout(); fitView(Store.state.nodes, 90, 1) } },
+        { label: '适配画面', hint: 'Shift+1', onClick: () => fitView() }
+      ], { x: e.clientX, y: e.clientY })
     })
   }
 
@@ -210,7 +220,6 @@ window.Canvas = (function () {
       window.removeEventListener('pointerup', up)
       R.viewport.classList.remove('is-panning')
       interaction = null
-      // 空白处单击（没拖动）= 取消选择
       if (!moved && clearSelectionOnClick) Store.setSelection([])
     }
     window.addEventListener('pointermove', move)
@@ -220,8 +229,7 @@ window.Canvas = (function () {
   function startMarquee(e) {
     const rect = paneRect()
     const origin = { x: e.clientX - rect.left, y: e.clientY - rect.top }
-    const additive = e.shiftKey
-    const baseSelection = additive ? [...Store.state.selection] : []
+    const baseSelection = [...Store.state.selection]
     let moved = false
     interaction = 'marquee'
 
@@ -255,7 +263,6 @@ window.Canvas = (function () {
       window.removeEventListener('pointerup', up)
       R.marquee.hidden = true
       interaction = null
-      if (!moved && !additive) Store.setSelection([])
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
@@ -263,7 +270,6 @@ window.Canvas = (function () {
 
   function bindKeyboard() {
     window.addEventListener('keydown', (e) => {
-      // 预览页打开时，快捷键归它管
       if (window.Preview?.isOpen()) return
       const typing = /^(input|textarea)$/i.test(e.target.tagName) || e.target.isContentEditable
       if (e.code === 'Space' && !typing) {
@@ -271,7 +277,7 @@ window.Canvas = (function () {
         R.viewport.classList.add('space-down')
       }
       if (e.key === 'Escape') {
-        closeGenMenu()
+        UI.closeMenu()
         if (typing) e.target.blur()
         else Store.setSelection([])
       }
@@ -279,10 +285,7 @@ window.Canvas = (function () {
 
       if ((e.key === 'Delete' || e.key === 'Backspace') && Store.state.selection.length) {
         e.preventDefault()
-        Store.pushUndo()
-        const ids = [...Store.state.selection]
-        Store.removeNodes(ids)
-        U.toast(`已删除 <span class="k">${ids.length}</span> 个节点（Ctrl+Z 撤销）`)
+        removeNodes([...Store.state.selection])
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
@@ -293,6 +296,11 @@ window.Canvas = (function () {
         e.preventDefault()
         Store.setSelection(Store.state.nodes.map((n) => n.id))
       }
+      if (e.key === 'Enter' && Store.state.selection.length === 1) {
+        const node = Store.nodeById(Store.state.selection[0])
+        if (node?.type === 'text') startEditing(node.id)
+        else if (node?.status === 'ready') window.Preview.open(node.id)
+      }
       if (e.shiftKey && e.code === 'Digit1') fitView()
       if (e.shiftKey && e.code === 'Digit0') resetZoom()
     })
@@ -301,44 +309,6 @@ window.Canvas = (function () {
       if (e.code === 'Space') {
         spaceDown = false
         R.viewport.classList.remove('space-down')
-      }
-    })
-  }
-
-  function bindToolbar() {
-    R.toolbar.addEventListener('click', (e) => {
-      const act = e.target.closest('button')?.dataset.act
-      if (!act) return
-      const nodes = Store.selectedNodes()
-      if (!nodes.length) return
-      if (act === 'detail') {
-        window.Preview.open(nodes[0].id)
-      } else if (act === 'generate') {
-        const rect = e.target.getBoundingClientRect()
-        openGenMenu(nodes, { x: rect.left, y: rect.bottom + 6 })
-      } else if (act === 'delete') {
-        Store.pushUndo()
-        Store.removeNodes(nodes.map((n) => n.id))
-      } else if (act === 'duplicate') {
-        Store.pushUndo()
-        const copies = nodes.map((n) => {
-          const spot = Store.findFreeSpot(n.x + 40, n.y + 40, n.w, n.h)
-          return Store.addNode({ ...n, id: undefined, x: spot.x, y: spot.y, fresh: true, title: n.title })
-        })
-        Store.setSelection(copies.map((n) => n.id))
-      } else if (act === 'edit') {
-        const node = nodes[0]
-        focusNode(node.id)
-        const el = nodeEls.get(node.id)
-        if (node.type === 'text') el?.querySelector('.node-text')?.focus()
-        else if (node.status === 'empty') Store.patchNode(node.id, { status: 'prompt' })
-        else U.toast('图片 / 视频节点可在卡片内重新生成或替换素材')
-      }
-    })
-
-    document.addEventListener('pointerdown', (e) => {
-      if (!R.genMenu.hidden && !e.target.closest('.gen-menu') && !e.target.closest('[data-act="generate"]') && !e.target.closest('.node-handle')) {
-        closeGenMenu()
       }
     })
   }
@@ -356,66 +326,133 @@ window.Canvas = (function () {
     })
   }
 
-  /* ============ 悬浮操作条 ============ */
-  function positionToolbar() {
-    const sel = Store.selectedNodes()
-    if (!sel.length || interaction === 'marquee') {
-      R.toolbar.hidden = true
-      return
-    }
-    const b = Store.bounds(sel)
-    const p = worldToScreen(b.minX + b.w / 2, b.minY)
-    const paneBox = paneRect()
-    R.toolbar.hidden = false
-    const width = R.toolbar.offsetWidth || 220
-    const left = U.clamp(p.x - width / 2, 12, paneBox.width - width - 12)
-    R.toolbar.style.left = `${left}px`
-    R.toolbar.style.top = `${U.clamp(p.y - 40, 52, paneBox.height - 60)}px`
-    R.toolbar.querySelector('[data-act="edit"]').hidden = sel.length > 1
-    R.toolbar.querySelector('[data-act="generate"]').textContent = sel.length > 1 ? `✦ 批量生成 (${sel.length})` : '✦ 生成'
+  /* ============ 节点动作 ============ */
+  function removeNodes(ids) {
+    if (!ids.length) return
+    Store.pushUndo()
+    Store.removeNodes(ids)
+    U.toast(`已删除 <span class="k">${ids.length}</span> 个节点（Ctrl+Z 撤销）`)
   }
 
-  /* ============ 生成菜单 ============ */
+  function startEditing(id) {
+    const node = Store.nodeById(id)
+    if (!node || node.type !== 'text') return
+    editing.add(id)
+    Store.setSelection([id])
+    render()
+    requestAnimationFrame(() => {
+      const ta = nodeEls.get(id)?.querySelector('textarea.node-text')
+      if (!ta) return
+      ta.focus()
+      ta.setSelectionRange(ta.value.length, ta.value.length)
+    })
+  }
+
+  function stopEditing(id) {
+    if (!editing.delete(id)) return
+    render()
+  }
+
+  /** 让「待输入」的空节点把光标落进提示词框 */
+  function focusPromptInput(id) {
+    requestAnimationFrame(() => {
+      nodeEls.get(id)?.querySelector('.prompt-pad textarea')?.focus()
+    })
+  }
+
+  function safeName(node) {
+    return (node.title || '素材').replace(/[\\/:*?"<>|]/g, '_')
+  }
+
+  function saveUrl(url, filename, revoke = false) {
+    const a = U.el('a', { href: url, download: filename })
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    if (revoke) setTimeout(() => URL.revokeObjectURL(url), 2000)
+  }
+
+  function downloadNode(node) {
+    if (node.type === 'text') {
+      const blob = new Blob([node.text || ''], { type: 'text/plain;charset=utf-8' })
+      saveUrl(URL.createObjectURL(blob), `${safeName(node)}.txt`, true)
+      U.toast('已下载文本')
+      return
+    }
+    const isFile = node.mediaKind === 'file'
+    const url = node.type === 'video' ? (isFile ? node.src : node.poster) : node.src
+    if (!url) {
+      U.toast('这个节点还没有素材可下载')
+      return
+    }
+    saveUrl(url, `${safeName(node)}.${node.type === 'video' && isFile ? 'mp4' : 'jpg'}`)
+    U.toast(node.type === 'video' && !isFile ? 'Demo 里 AI 视频只有封面，已下载封面图' : '已下载素材')
+  }
+
+  async function copyToClipboard(text, okMsg) {
+    try {
+      await navigator.clipboard.writeText(text)
+      U.toast(okMsg)
+    } catch {
+      U.toast('浏览器拦截了剪贴板，可手动选中复制')
+    }
+  }
+
+  function anchorOf(e) {
+    const r = e.currentTarget.getBoundingClientRect()
+    return { x: r.left, y: r.bottom + 6 }
+  }
+
+  /** 「继续生成」菜单：与右键菜单共用一套实现 */
   function openGenMenu(nodes, screenPos) {
     const list = window.Generate.actionsFor(nodes)
     if (!list.length) {
-      U.toast('该节点暂不支持继续派生')
+      U.toast('这个节点没有可继续派生的能力')
       return
     }
-    genMenuCtx = { nodes }
-    R.genMenuHead.textContent = nodes.length > 1
-      ? `以选中的 ${nodes.length} 个节点为素材继续生成`
-      : `以「${U.truncate(nodes[0].title, 12)}」为素材继续生成`
-    R.genMenuList.innerHTML = ''
-    list.forEach((action) => {
-      if (action.sep) {
-        R.genMenuList.appendChild(U.el('div', { class: 'gen-sep' }))
-        return
-      }
-      R.genMenuList.appendChild(U.el('button', {
-        class: 'gen-item',
-        onclick: () => {
-          closeGenMenu()
-          window.Generate.run(nodes, action)
-        }
-      }, [
-        U.el('span', { class: `ic ic-${action.to}`, text: KIND_ICON[action.to] }),
-        U.el('span', { class: 'tx' }, [
-          document.createTextNode(action.label),
-          U.el('em', { text: action.desc })
-        ])
-      ]))
-    })
-    R.genMenu.hidden = false
-    const paneBox = paneRect()
-    const w = 216
-    R.genMenu.style.left = `${U.clamp(screenPos.x - paneBox.left, 12, paneBox.width - w - 12)}px`
-    R.genMenu.style.top = `${U.clamp(screenPos.y - paneBox.top, 52, paneBox.height - R.genMenu.offsetHeight - 20)}px`
+    UI.menu(list.filter((a) => !a.sep).map((action) => ({
+      label: action.label,
+      hint: action.hintText,
+      onClick: () => window.Generate.run(nodes, action)
+    })), screenPos)
   }
 
-  function closeGenMenu() {
-    R.genMenu.hidden = true
-    genMenuCtx = null
+  function closeGenMenu() { UI.closeMenu() }
+
+  function nodeMenuItems(nodes) {
+    if (nodes.length > 1) {
+      return [
+        { title: `已选中 ${nodes.length} 个节点` },
+        ...window.Generate.actionsFor(nodes).map((a) => ({
+          label: a.label,
+          onClick: () => window.Generate.run(nodes, a)
+        })),
+        { sep: true },
+        { label: `删除 ${nodes.length} 个节点`, hint: 'Delete', danger: true, onClick: () => removeNodes(nodes.map((n) => n.id)) }
+      ]
+    }
+
+    const node = nodes[0]
+    const items = window.Generate.actionsFor([node]).map((a) => ({
+      label: a.label,
+      hint: a.hintText,
+      onClick: () => window.Generate.run([node], a)
+    }))
+    if (items.length) items.push({ sep: true })
+
+    if (node.type === 'text') {
+      items.push({ label: '编辑文本', hint: '双击', onClick: () => startEditing(node.id) })
+      items.push({ label: '复制文本', onClick: () => copyToClipboard(node.text || '', '已复制文本') })
+    } else if (node.status === 'ready') {
+      items.push({ label: '查看详情', hint: '双击', onClick: () => window.Preview.open(node.id) })
+      if (node.prompt) items.push({ label: '复制提示词', onClick: () => copyToClipboard(node.prompt, '已复制提示词') })
+    }
+    if (node.type === 'text' || node.status === 'ready') {
+      items.push({ label: '下载到本地', onClick: () => downloadNode(node) })
+    }
+    items.push({ sep: true })
+    items.push({ label: '删除节点', hint: 'Delete', danger: true, onClick: () => removeNodes([node.id]) })
+    return items
   }
 
   /* ============ 渲染 ============ */
@@ -440,11 +477,11 @@ window.Canvas = (function () {
       if (!seen.has(id)) {
         el.remove()
         nodeEls.delete(id)
+        editing.delete(id)
       }
     })
     renderEdges()
     renderChrome()
-    positionToolbar()
   }
 
   /** 单选时高亮血缘：自身 + 全部祖先 + 全部后代 */
@@ -469,7 +506,7 @@ window.Canvas = (function () {
   function renderChrome() {
     const n = Store.state.nodes.length
     const e = Store.state.edges.length
-    R.meta.textContent = `${n} 个节点 · ${e} 条关系`
+    R.meta.textContent = e ? `${n} 节点 · ${e} 关系` : `${n} 节点`
     R.empty.hidden = n > 0
   }
 
@@ -532,7 +569,6 @@ window.Canvas = (function () {
     R.edgePaths.replaceChildren(pathsFrag)
     R.edgeLabels.replaceChildren(labelsFrag)
 
-    // 血缘淡出
     nodeEls.forEach((el, id) => {
       el.classList.toggle('is-dim', !!lineage && !lineage.has(id))
     })
@@ -541,48 +577,29 @@ window.Canvas = (function () {
   /* ============ 节点 DOM ============ */
   function buildNodeShell(node) {
     const el = U.el('div', { class: 'node', 'data-id': node.id, 'data-type': node.type })
-    el.appendChild(U.el('div', { class: 'node-head' }, [
-      U.el('span', { class: 'node-kind', text: KIND_ICON[node.type] }),
-      U.el('span', { class: 'node-title' }),
-      U.el('span', { class: 'node-badge' }),
-      U.el('button', {
-        class: 'node-expand',
-        text: '⤢',
-        title: '查看详情（局部放大预览）',
-        onclick: (e) => {
-          e.stopPropagation()
-          window.Preview.open(node.id)
-        }
-      })
-    ]))
     el.appendChild(U.el('div', { class: 'node-body' }))
-    el.appendChild(U.el('div', { class: 'node-foot' }, [
-      U.el('span', { class: 'from' }),
-      U.el('span', { class: 'spacer' }),
-      U.el('span', { class: 'cnt' })
-    ]))
-    el.appendChild(U.el('button', {
-      class: 'node-handle',
-      title: '以该节点为素材继续生成',
-      text: '＋',
-      onclick: (e) => {
-        e.stopPropagation()
-        Store.setSelection([node.id])
-        const r = e.currentTarget.getBoundingClientRect()
-        openGenMenu([Store.nodeById(node.id)], { x: r.right + 8, y: r.top - 10 })
-      }
-    }))
+    el.appendChild(U.el('div', { class: 'node-meta' }))
+    el.appendChild(U.el('div', { class: 'node-bar-wrap' }, [U.el('div', { class: 'node-bar' })]))
 
-    // 选中 + 拖拽
     el.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return
-      if (spaceDown) return
-      const interactive = e.target.closest('textarea, input, button, .media-play')
+      if (e.button !== 0 || spaceDown) return
+      const interactive = e.target.closest('textarea, input, button, .media-play, .node-bar-wrap')
       const id = node.id
       if (e.shiftKey) Store.toggleSelection(id)
       else if (!Store.state.selection.includes(id)) Store.setSelection([id])
       if (interactive) return
       startNodeDrag(e, id)
+    })
+
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const id = node.id
+      const sel = Store.state.selection.includes(id) && Store.state.selection.length > 1
+        ? Store.selectedNodes()
+        : [Store.nodeById(id)]
+      if (!Store.state.selection.includes(id)) Store.setSelection([id])
+      UI.menu(nodeMenuItems(sel.filter(Boolean)), { x: e.clientX, y: e.clientY })
     })
 
     return el
@@ -617,7 +634,6 @@ window.Canvas = (function () {
         if (el) el.style.transform = `translate(${n.x}px, ${n.y}px)`
       })
       renderEdges()
-      positionToolbar()
     }
 
     const up = () => {
@@ -631,20 +647,45 @@ window.Canvas = (function () {
     window.addEventListener('pointerup', up)
   }
 
-  function badgeFor(node) {
-    if (node.status === 'generating') return { cls: 'run', text: `生成中 ${Math.round((node.progress || 0) * 100)}%` }
-    if (node.status === 'failed') return { cls: 'fail', text: '生成失败' }
-    if (node.status === 'empty') return { cls: '', text: '待添加素材' }
-    if (node.status === 'prompt') return { cls: 'ai', text: '待生成' }
-    if (node.kind === 'final') return { cls: 'final', text: '成片' }
-    if (node.source === 'upload') return { cls: 'upload', text: '本地' }
-    if (node.source === 'ai' || node.source === 'agent') return { cls: 'ai', text: 'AI 生成' }
-    if (node.type === 'text') return { cls: '', text: Store.KIND_LABEL[node.kind] || '文本' }
-    return { cls: '', text: '' }
+  /** 卡片下方那行小字：标题 +（有父节点时）来自谁 */
+  function metaHtml(node) {
+    const parents = Store.parentsOf(node.id)
+    const title = U.escapeHtml(U.truncate(node.title, 16))
+    if (!parents.length) return `<b>${title}</b>`
+    const from = parents.length > 1
+      ? `${parents.length} 个素材`
+      : U.escapeHtml(U.truncate(parents[0].title, 10))
+    return `<b>${title}</b> <span class="from">← ${from}</span>`
+  }
+
+  function barKey(node) {
+    return [node.type, node.status, editing.has(node.id) ? 'edit' : ''].join('|')
+  }
+
+  function buildBar(node) {
+    const btns = []
+    const gen = window.Generate.actionsFor([node])
+    if (gen.length && (node.status === 'ready' || node.type === 'text')) {
+      btns.push(UI.iconBtn('✦', '继续生成', (e) => openGenMenu([Store.nodeById(node.id)], anchorOf(e))))
+    }
+    if (node.type === 'text') {
+      btns.push(UI.iconBtn('✎', '编辑文本', () => startEditing(node.id)))
+      btns.push(UI.iconBtn('⧉', '复制文本', () => copyToClipboard(Store.nodeById(node.id)?.text || '', '已复制文本')))
+    } else if (node.status === 'ready') {
+      btns.push(UI.iconBtn('⤢', '查看详情（局部放大）', () => window.Preview.open(node.id)))
+    }
+    if (node.type === 'text' || node.status === 'ready') {
+      btns.push(UI.iconBtn('↓', '下载到本地', () => downloadNode(Store.nodeById(node.id))))
+    }
+    btns.push(UI.iconBtn('✕', '删除', () => removeNodes([node.id]), { cls: 'danger' }))
+    return btns
   }
 
   function bodyKey(node) {
-    return [node.type, node.status, node.src ? 'src' : 'nosrc', node.mediaKind || ''].join('|')
+    return [
+      node.type, node.status, node.src ? 'src' : 'nosrc', node.mediaKind || '',
+      editing.has(node.id) ? 'edit' : ''
+    ].join('|')
   }
 
   function updateNodeEl(el, node) {
@@ -653,13 +694,6 @@ window.Canvas = (function () {
     el.style.height = `${node.h}px`
     el.classList.toggle('is-selected', Store.state.selection.includes(node.id))
     el.classList.toggle('is-final', node.kind === 'final')
-
-    el.querySelector('.node-title').textContent = node.title
-    const badge = badgeFor(node)
-    const badgeEl = el.querySelector('.node-badge')
-    badgeEl.className = `node-badge ${badge.cls}`
-    badgeEl.textContent = badge.text
-    badgeEl.hidden = !badge.text
 
     const body = el.querySelector('.node-body')
     const key = bodyKey(node)
@@ -670,26 +704,14 @@ window.Canvas = (function () {
       refreshBody(body, node)
     }
 
-    // 血缘脚注
-    const parents = Store.parentsOf(node.id)
-    const fromEl = el.querySelector('.node-foot .from')
-    if (parents.length > 1) {
-      fromEl.textContent = `来自 ${parents.length} 个素材`
-      fromEl.onclick = (e) => {
-        e.stopPropagation()
-        fitView([...parents, node], 140, 1)
-        U.toast(`已框出「${U.truncate(node.title, 10)}」用到的 <span class="k">${parents.length}</span> 个素材`)
-      }
-    } else if (parents.length === 1) {
-      const edge = Store.parentEdgesOf(node.id)[0]
-      fromEl.textContent = `来自：${U.truncate(parents[0].title, 10)}${edge?.label ? ` · ${edge.label}` : ''}`
-      fromEl.onclick = (e) => { e.stopPropagation(); focusNode(parents[0].id) }
-    } else {
-      fromEl.textContent = node.source === 'upload' ? '本地上传' : node.source === 'agent' ? 'Agent 创建' : '手动创建'
-      fromEl.onclick = null
+    const bar = el.querySelector('.node-bar')
+    const bKey = barKey(node)
+    if (bar.dataset.key !== bKey) {
+      bar.dataset.key = bKey
+      bar.replaceChildren(...buildBar(node))
     }
-    const children = Store.childrenOf(node.id).length
-    el.querySelector('.node-foot .cnt').textContent = children ? `↳ ${children} 个派生` : ''
+
+    el.querySelector('.node-meta').innerHTML = metaHtml(node)
   }
 
   function refreshBody(body, node) {
@@ -697,11 +719,16 @@ window.Canvas = (function () {
       const bar = body.querySelector('.loading-bar i')
       if (bar) bar.style.width = `${Math.round((node.progress || 0) * 100)}%`
       const label = body.querySelector('.loading-label')
-      if (label) label.textContent = node.loadingLabel || 'AI 正在生成…'
+      if (label) label.textContent = `${node.loadingLabel || 'AI 正在生成…'} ${Math.round((node.progress || 0) * 100)}%`
     }
     if (node.type === 'text') {
-      const ta = body.querySelector('.node-text')
+      const ta = body.querySelector('textarea.node-text')
       if (ta && document.activeElement !== ta && ta.value !== (node.text || '')) ta.value = node.text || ''
+      const div = body.querySelector('div.node-text')
+      if (div) {
+        div.textContent = node.text || '空文本 · 双击输入'
+        div.classList.toggle('is-empty', !node.text)
+      }
     }
   }
 
@@ -715,23 +742,24 @@ window.Canvas = (function () {
   }
 
   function buildTextBody(node) {
-    const ta = U.el('textarea', {
-      class: 'node-text',
-      placeholder: '点击这里用键盘输入文本 / 脚本…',
-      spellcheck: 'false'
-    })
+    if (!editing.has(node.id)) {
+      return U.el('div', {
+        class: `node-text${node.text ? '' : ' is-empty'}`,
+        text: node.text || '空文本 · 双击输入'
+      })
+    }
+    const ta = U.el('textarea', { class: 'node-text', placeholder: '直接键盘输入…', spellcheck: 'false' })
     ta.value = node.text || ''
     ta.addEventListener('input', () => {
       const n = Store.nodeById(node.id)
       if (n) n.text = ta.value // 输入过程中不触发整树重绘
     })
-    ta.addEventListener('change', () => Store.emit('text:commit'))
     ta.addEventListener('blur', () => {
       const n = Store.nodeById(node.id)
-      if (n && n.text.trim() && n.title === '文本' ) n.title = U.truncate(n.text, 10)
+      if (n && n.text.trim() && n.title === '文本') n.title = U.truncate(n.text, 12)
+      stopEditing(node.id)
       Store.emit('text:commit')
     })
-    ta.addEventListener('focus', () => Store.setSelection([node.id]))
     ta.addEventListener('keydown', (e) => e.stopPropagation())
     return ta
   }
@@ -739,16 +767,15 @@ window.Canvas = (function () {
   function buildSlotBody(node) {
     const isImage = node.type === 'image'
     const slot = U.el('div', { class: 'node-slot' }, [
-      U.el('div', { class: 'slot-hint', text: `拖入本地${isImage ? '图片' : '视频'}，或选择：` }),
       U.el('button', {
         class: 'slot-btn',
-        html: `<span>⬆</span> 上传本地${isImage ? '图片' : '视频'}`,
+        html: '<span>⬆</span> 上传本地',
         onclick: (e) => { e.stopPropagation(); window.App.pickFileInto(node.id) }
       }),
       U.el('button', {
-        class: 'slot-btn ai',
-        html: `<span>✦</span> AI 生成${isImage ? '图片' : '视频'}`,
-        onclick: (e) => { e.stopPropagation(); Store.patchNode(node.id, { status: 'prompt' }) }
+        class: 'slot-btn',
+        html: '<span>✦</span> AI 生成',
+        onclick: (e) => { e.stopPropagation(); Store.patchNode(node.id, { status: 'prompt' }); focusPromptInput(node.id) }
       })
     ])
     slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('drag-over') })
@@ -760,66 +787,79 @@ window.Canvas = (function () {
       const file = e.dataTransfer?.files?.[0]
       if (file) window.App.loadFileInto(node.id, file)
     })
+    slot.dataset.hint = isImage ? '图片' : '视频'
     return slot
   }
 
+  /** 待输入节点：继承来的参考图 + 提示词框，用户补一句就能生成 */
   function buildPromptBody(node) {
-    const isImage = node.type === 'image'
+    const refs = (node.refs || []).map(Store.nodeById).filter(Boolean)
+    const ref = refs.find((n) => n.type === 'image' || n.type === 'video') || refs[0]
+    const isVideo = node.type === 'video'
+
     const ta = U.el('textarea', {
-      placeholder: isImage ? '描述想要的画面，例如：国风少女特写，暖光，胶片质感' : '描述想要的镜头，例如：产品旋转展示，慢推镜头，柔光'
+      placeholder: ref
+        ? (isVideo ? '补充运镜 / 动作，例如：缓慢推近，人物转身' : '补充画面要求，例如：换成暖光')
+        : (isVideo ? '描述想要的镜头' : '描述想要的画面')
     })
     ta.value = node.prompt || ''
     ta.addEventListener('keydown', (e) => {
       e.stopPropagation()
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) go()
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        go()
+      }
     })
 
     const go = () => {
-      const prompt = ta.value.trim()
-      if (!prompt) {
+      const text = ta.value.trim()
+      if (!text) {
         ta.focus()
-        U.toast('先写一句提示词，再让 AI 生成')
+        U.toast('写一句想要的效果，再点生成')
         return
       }
-      window.Generate.generateInto(node.id, prompt)
+      const prompt = ref ? `参考「${U.truncate(ref.title, 10)}」，${text}` : text
+      window.Generate.generateInto(node.id, prompt, {
+        kind: ref?.posterKind,
+        title: node.title
+      })
     }
 
-    const chips = (isImage
-      ? ['人物图 · 女主角特写', '场景图 · 江南清晨街巷', '商品图 · 护手霜礼盒质感']
-      : ['产品慢推镜头 5s', '人物走位空镜 4s', '氛围转场镜头 3s'])
-      .map((t) => U.el('button', {
-        class: 'prompt-chip',
-        text: t,
-        onclick: (e) => { e.stopPropagation(); ta.value = t; ta.focus() }
-      }))
+    const children = []
+    if (ref) {
+      const thumb = ref.type === 'image' ? ref.src : ref.poster
+      children.push(U.el('div', { class: 'ref-strip' }, [
+        thumb ? U.el('img', { src: thumb, alt: '' }) : null,
+        U.el('span', { class: 'ref-tx' }, [
+          U.el('b', { text: '参考图' }),
+          U.el('em', { text: U.truncate(ref.title, 14) })
+        ])
+      ]))
+    }
+    children.push(ta)
+    children.push(U.el('div', { class: 'prompt-actions' }, [
+      ref ? null : U.el('button', {
+        class: 'slot-btn',
+        text: '返回',
+        onclick: (e) => { e.stopPropagation(); Store.patchNode(node.id, { status: 'empty' }) }
+      }),
+      U.el('button', { class: 'slot-btn go', text: '生成', onclick: (e) => { e.stopPropagation(); go() } })
+    ]))
 
-    setTimeout(() => ta.focus(), 30)
-
-    return U.el('div', { class: 'prompt-pad' }, [
-      ta,
-      U.el('div', { class: 'prompt-chips' }, chips),
-      U.el('div', { class: 'prompt-actions' }, [
-        U.el('button', {
-          class: 'slot-btn',
-          text: '返回',
-          onclick: (e) => { e.stopPropagation(); Store.patchNode(node.id, { status: 'empty' }) }
-        }),
-        U.el('button', { class: 'slot-btn go', html: '✦ 生成', onclick: (e) => { e.stopPropagation(); go() } })
-      ])
-    ])
+    return U.el('div', { class: 'prompt-pad' }, children)
   }
 
   function buildLoadingBody(node) {
     return U.el('div', { class: 'node-loading' }, [
-      U.el('div', { class: 'loading-label', text: node.loadingLabel || 'AI 正在生成…' }),
+      U.el('div', { class: 'loading-label', text: `${node.loadingLabel || 'AI 正在生成…'} ${Math.round((node.progress || 0) * 100)}%` }),
       U.el('div', { class: 'loading-bar' }, [U.el('i', { style: { width: `${Math.round((node.progress || 0) * 100)}%` } })]),
-      node.prompt ? U.el('div', { class: 'loading-prompt', text: U.truncate(node.prompt, 34) }) : null
+      node.prompt ? U.el('div', { class: 'loading-prompt', text: U.truncate(node.prompt, 30) }) : null
     ])
   }
 
   function buildFailBody(node) {
     return U.el('div', { class: 'node-fail' }, [
-      U.el('div', { text: '生成失败：算力排队超时' }),
+      U.el('div', { text: '生成失败' }),
       U.el('button', {
         class: 'slot-btn',
         text: '重试',
@@ -836,7 +876,6 @@ window.Canvas = (function () {
       return media
     }
 
-    // 视频：本地文件用真实 <video>，AI 生成用封面 + 模拟播放
     if (node.mediaKind === 'file') {
       const video = U.el('video', { src: node.src, muted: 'true', playsinline: 'true', loop: 'true', preload: 'metadata' })
       const overlay = U.el('button', { class: 'media-play', html: '<span>▶</span>' })
@@ -848,7 +887,7 @@ window.Canvas = (function () {
       })
       overlay.addEventListener('click', (e) => {
         e.stopPropagation()
-        if (video.paused) { video.play(); overlay.style.opacity = '0' } else { video.pause(); overlay.style.opacity = '1' }
+        if (video.paused) { video.play(); media.classList.add('is-playing') } else { video.pause(); media.classList.remove('is-playing') }
       })
       media.append(video, overlay, timeline, dur)
       return media
@@ -865,17 +904,16 @@ window.Canvas = (function () {
         cancelAnimationFrame(raf)
         raf = 0
         img.classList.remove('kenburns')
-        overlay.style.opacity = '1'
+        media.classList.remove('is-playing')
         timeline.firstChild.style.width = '0%'
         return
       }
-      overlay.style.opacity = '0'
+      media.classList.add('is-playing')
       img.classList.add('kenburns')
       const total = (node.duration || 5) * 1000
       const start = performance.now()
       const step = (now) => {
-        const t = ((now - start) % total) / total
-        timeline.firstChild.style.width = `${t * 100}%`
+        timeline.firstChild.style.width = `${(((now - start) % total) / total) * 100}%`
         raf = requestAnimationFrame(step)
       }
       raf = requestAnimationFrame(step)
@@ -886,8 +924,9 @@ window.Canvas = (function () {
 
   return {
     init, render, applyViewport, screenToWorld, worldToScreen, viewCenter,
-    zoomBy, resetZoom, fitView, focusNode, flashNode, openGenMenu, closeGenMenu,
+    zoomBy, resetZoom, fitView, focusNode, flashNode,
+    openGenMenu, closeGenMenu, startEditing, focusPromptInput, downloadNode,
     // 供局部放大预览页复用，保证两处的卡片、连线完全一致
-    mediaBody: buildMediaBody, badgeOf: badgeFor, edgeGeometry: edgePath, KIND_ICON
+    mediaBody: buildMediaBody, edgeGeometry: edgePath, KIND_ICON
   }
 })()

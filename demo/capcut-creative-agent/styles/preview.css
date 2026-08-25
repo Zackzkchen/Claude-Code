@@ -30,11 +30,18 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 40%;
 }
-.preview-scope { font-size: 10.5px; color: var(--muted-2); }
-/* 头部的类型徽标沿用画布上同类型节点的填充方式 */
+.preview-title .node-kind {
+  width: 17px; height: 17px; border-radius: 5px; flex: none;
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 700;
+}
 .preview-title[data-type="text"] .node-kind { background: #ededed; color: #0b0b0c; }
 .preview-title[data-type="image"] .node-kind { background: #6e6e70; color: #0b0b0c; }
 .preview-title[data-type="video"] .node-kind { background: transparent; color: #ededed; box-shadow: inset 0 0 0 1.5px #b0b0b0; }
+.preview-title .node-badge {
+  font-size: 10px; padding: 1px 7px; border-radius: 20px;
+  border: 1px solid #4a4a4c; color: #d0d0d0;
+}
 .preview-head-right { flex: none; display: flex; align-items: center; gap: 6px; }
 
 .preview-body { flex: 1 1 auto; min-height: 0; display: flex; }
@@ -58,23 +65,12 @@
   transform-origin: 0 0;
 }
 
-.preview-hint {
-  position: absolute;
-  left: 50%; bottom: 12px;
-  transform: translateX(-50%);
-  padding: 5px 12px;
-  border-radius: 20px;
-  background: rgba(18, 18, 20, .9);
-  border: 1px solid var(--line);
-  color: var(--muted-2);
-  font-size: 10.5px;
-  pointer-events: none;
-}
-
 /* 预览里的卡片沿用画布卡片样式，只额外标出「当前节点 / 上下游」 */
 .preview-world .node { cursor: pointer; }
 .preview-world .node.is-target { cursor: default; }
-.preview-world .node.is-target .node-handle { display: none; }
+/* 预览里空间够，标题常显；凸巴不出现（操作都在右侧详情栏） */
+.preview-world .node-meta.always { opacity: 1; }
+.preview-world .node-bar-wrap { display: none; }
 .preview-role {
   position: absolute;
   left: 0; top: -26px;
@@ -167,19 +163,4 @@
 .side-btn.primary:hover { background: #fff; }
 .side-btn.danger:hover { background: #333335; color: #fff; }
 
-/* 节点卡片头部的「查看详情」小按钮 */
-.node-expand {
-  flex: none;
-  width: 19px; height: 19px;
-  border: 1px solid #3a3a3c;
-  border-radius: 6px;
-  background: #1d1d1f;
-  color: #a8a8a8;
-  font-size: 10px; line-height: 1;
-  display: grid; place-items: center;
-  opacity: .55;
-  transition: opacity .14s ease, background .14s ease, color .14s ease;
-}
-.node:hover .node-expand { opacity: 1; }
-.node-expand:hover { background: #ededed; color: #0b0b0c; border-color: transparent; }
-.node.is-selected .node-expand { opacity: 1; }
+
